@@ -1,18 +1,14 @@
-import asyncio
 import json
 import os
-from pyrogram import Client, filters, idle
+from pyrogram import Client, filters
 from pyrogram.enums import ParseMode
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery, Message
-from pyrogram.errors import (
-    UserAlreadyParticipant, 
-    RPCError
-)
+from pyrogram.errors import UserAlreadyParticipant
 
 # ==================== CONFIGURATION ====================
-API_ID = 31551910  # यहाँ अपनी असली API ID डालें
-API_HASH = "c2e8e7946d5e4ea947d44b674008f33e"  # यहाँ अपना असली API HASH डालें
-BOT_TOKEN = "8595762999:AAFaOJlhG0lAqyA1Xr7Lx3hqY4DR-dDi39M"  # यहाँ अपना असली BOT TOKEN डालें
+API_ID = 31551910
+API_HASH = "c2e8e7946d5e4ea947d44b674008f33e"
+BOT_TOKEN = "8595762999:AAFaOJlhG0lAqyA1Xr7Lx3hqY4DR-dDi39M"
 
 SESSIONS_FILE = "sessions.json"
 
@@ -145,7 +141,7 @@ async def callback_handler(client, query: CallbackQuery):
     elif data == "views_toggle":
         auto_views = not auto_views
         status = "चालू" if auto_views else "बंद"
-        await query.answer(f"Auto-Views अब {status} कर दिया गया है!", show_alert=True)
+        await query.answer(f"Auto-Views अब ${status} कर दिया गया है!", show_alert=True)
         await query.message.edit_text(text=get_status_text(), reply_markup=get_main_keyboard(), parse_mode=ParseMode.HTML)
 
     elif data == "admin_panel":
@@ -213,11 +209,6 @@ async def message_input_handler(_, message: Message):
         user_states[user_id] = None
 
 # ==================== RUN BOT ====================
-async def main():
-    await bot.start()
-    print("🤖 M2M Control Bot चालू हो रहा है...")
-    await idle()
-    await bot.stop()
-
 if __name__ == "__main__":
-    asyncio.run(main())
+    print("🤖 M2M Control Bot चालू हो रहा है...")
+    bot.run()
