@@ -12,7 +12,7 @@ from pyrogram.errors import (
 # ==================== CONFIGURATION ====================
 API_ID = 31551910  # यहाँ अपनी असली API ID डालें
 API_HASH = "c2e8e7946d5e4ea947d44b674008f33e"  # यहाँ अपना असली API HASH डालें
-BOT_TOKEN = "8595762999:AAFaOJlhG0lAqyA1Xr7Lx3hqY4DR-dDi39M"  # यहाँ अपना असली BOT TOKEN डालें
+BOT_TOKEN = "8595762999:AAHNgNIHeWZLvcp5zr_6zJ3TTxe7u3aXpa8"  # यहाँ अपना असली BOT TOKEN डालें
 
 SESSIONS_FILE = "sessions.json"
 
