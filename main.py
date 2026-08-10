@@ -1,7 +1,7 @@
 import asyncio
 import json
 import os
-from pyrogram import Client, filters
+from pyrogram import Client, filters, idle
 from pyrogram.enums import ParseMode
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery, Message
 from pyrogram.errors import (
@@ -182,31 +182,42 @@ async def message_input_handler(_, message: Message):
         user_states[user_id] = None
 
     elif state == "WAITING_FOR_CHANNEL":
-        chat_id = message.text.strip()
+        raw_link = message.text.strip()
         await message.reply_text("⏳ **सभी एकाउंट्स को ज्वाइन कराया जा रहा है...**")
         
+        target_chat = raw_link
+        if "t.me/" in raw_link:
+            target_chat = raw_link.split("t.me/")[-1]
+            if not target_chat.startswith("+") and not target_chat.startswith("joinchat/"):
+                target_chat = target_chat.replace("@", "")
+
         success = 0
         failed = 0
+        error_details = ""
 
         for session in user_sessions:
             try:
                 acc = Client("join_acc", api_id=API_ID, api_hash=API_HASH, session_string=session, in_memory=True)
                 await acc.connect()
-                await acc.join_chat(chat_id)
+                await acc.join_chat(target_chat)
                 await acc.disconnect()
                 success += 1
             except UserAlreadyParticipant:
                 success += 1
-            except Exception:
+            except Exception as e:
                 failed += 1
+                error_details = str(e)
 
-        await message.reply_text(f"🚀 **Join Operation Completed!**\n✅ **Failed:** {failed}\n❌ **Success:** {success}")
+        err_text = f"\n❌ **Reason:** `{error_details}`" if error_details else ""
+        await message.reply_text(f"🚀 **Join Operation Completed!**\n✅ **Success:** {success}\n❌ **Failed:** {failed}{err_text}")
         user_states[user_id] = None
 
 # ==================== RUN BOT ====================
-if __name__ == "__main__":
-    import asyncio
+async def main():
+    await bot.start()
     print("🤖 M2M Control Bot चालू हो रहा है...")
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    bot.run()
+    await idle()
+    await bot.stop()
+
+if __name__ == "__main__":
+    asyncio.run(main())
