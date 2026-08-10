@@ -2,7 +2,7 @@ import json
 import os
 import asyncio
 from pyrogram import Client, filters, idle
-from pyrogram.enums import ParseMessageMode, ParseMode
+from pyrogram.enums import ParseMode
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery, Message
 from pyrogram.errors import UserAlreadyParticipant
 
