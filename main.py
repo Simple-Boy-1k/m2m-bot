@@ -11,8 +11,8 @@ API_ID = 31551910
 API_HASH = "c2e8e7946d5e4ea947d44b674008f33e"
 BOT_TOKEN = "8595762999:AAFaOJlhG0lAqyA1Xr7Lx3hqY4DR-dDi39M"
 
-# 🔴 अपनी Telegram User ID यहाँ डालें
-ADMIN_IDS = [8237346239]  # <--- अपनी असली Telegram ID यहाँ लिखें!
+# 🔴 आपकी Telegram User ID यहाँ सेट कर दी गई है
+ADMIN_IDS = [8237346239]
 
 SESSIONS_FILE = "sessions.json"
 
@@ -240,7 +240,7 @@ async def message_input_handler(_, message: Message):
             else:
                 delay = int(delay_text)
         except ValueError:
-            delay = 2  # Default fallback 2 seconds
+            delay = 2
 
         target_chat = user_temp_data[user_id]["link"]
         max_acc = user_temp_data[user_id]["count"]
@@ -265,7 +265,6 @@ async def message_input_handler(_, message: Message):
                 failed += 1
                 error_details = str(e)
 
-            # अगर आखिरी अकाउंट नहीं है, तो तय किया गया delay दें
             if idx < len(sessions_to_use) and delay > 0:
                 await asyncio.sleep(delay)
 
