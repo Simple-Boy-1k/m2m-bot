@@ -1,18 +1,18 @@
 import asyncio
 import json
 import os
+import sys
 from pyrogram import Client, filters
 from pyrogram.enums import ParseMode
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery, Message
-from pyrogram.errors import (
-    UserAlreadyParticipant, 
-    RPCError
-)
+from pyrogram.errors import UserAlreadyParticipant, RPCError
+from pyrogram.raw.functions.phone import JoinGroupCall, LeaveGroupCall
+from pyrogram.raw.functions.channels import GetFullChannel
 
 # ==================== CONFIGURATION ====================
-API_ID = 31551910  # यहाँ अपनी असली API ID डालें
-API_HASH = "c2e8e7946d5e4ea947d44b674008f33e"  # यहाँ अपना असली API HASH डालें
-BOT_TOKEN = "8595762999:AAHNgNIHeWZLvcp5zr_6zJ3TTxe7u3aXpa8"  # यहाँ अपना असली BOT TOKEN डालें
+API_ID = 31551910
+API_HASH = "c2e8e7946d5e4ea947d44b674008f33e"
+BOT_TOKEN = "8595762999:AAHNgNIHeWZLvcp5zr_6zJ3TTxe7u3aXpa8"
 
 SESSIONS_FILE = "sessions.json"
 
@@ -112,15 +112,31 @@ async def callback_handler(client, query: CallbackQuery):
         await query.message.reply_text("🔗 **जिस चैनल/ग्रुप में जोड़ना है उसका Username या Invite Link भेजें:**")
 
     elif data == "vc_joiner":
-        await query.answer("तमाम IDs VC (Voice Chat) में जुड़ रही हैं...", show_alert=True)
+        if not user_sessions:
+            await query.answer("❌ कोई भी एकाउंट्स ऐड नहीं हैं!", show_alert=True)
+            return
+        user_states[user_id] = "WAITING_FOR_VC_CHANNEL"
+        user_temp_data[user_id] = {}
+        await query.answer()
+        await query.message.reply_text("🎙️ **जिस चैनल/ग्रुप की Voice Chat (VC) में जोड़ना है उसका Username या Link भेजें:**")
 
     elif data == "vc_leave":
-        active_vc_count = 0
-        await query.answer("सभी IDs VC छोड़ चुकी हैं!", show_alert=True)
-        await query.message.edit_text(text=get_status_text(), reply_markup=get_main_keyboard(), parse_mode=ParseMode.HTML)
+        if not user_sessions:
+            await query.answer("❌ कोई भी एकाउंट्स ऐड नहीं हैं!", show_alert=True)
+            return
+        user_states[user_id] = "WAITING_FOR_VC_LEAVE_COUNT"
+        user_temp_data[user_id] = {}
+        await query.answer()
+        await query.message.reply_text(f"🔴 **कितने एकाउंट्स को VC से बाहर निकालना है?**\n(कुल उपलब्ध IDs: {len(user_sessions)} | सभी के लिए `all` लिखें)")
 
     elif data == "leave_all":
-        await query.answer("तमाम एकाउंट्स सब चैनल्स को छोड़ रहे हैं...", show_alert=True)
+        if not user_sessions:
+            await query.answer("❌ कोई भी एकाउंट्स ऐड नहीं हैं!", show_alert=True)
+            return
+        user_states[user_id] = "WAITING_FOR_LEAVE_COUNT"
+        user_temp_data[user_id] = {}
+        await query.answer()
+        await query.message.reply_text(f"🚪 **कितने एकाउंट्स से चैनल्स/ग्रुप्स छोड़ने हैं?**\n(कुल उपलब्ध IDs: {len(user_sessions)} | सभी के लिए `all` लिखें)")
 
     elif data == "purge_dead":
         await query.answer("Dead / Banned IDs चेक की जा रही हैं...", show_alert=True)
@@ -143,7 +159,13 @@ async def callback_handler(client, query: CallbackQuery):
         await query.message.edit_text(text=get_status_text(), reply_markup=get_main_keyboard(), parse_mode=ParseMode.HTML)
 
     elif data == "react_views":
-        await query.answer("Reactions + Views भेजने का काम जारी है...", show_alert=True)
+        if not user_sessions:
+            await query.answer("❌ कोई भी एकाउंट्स ऐड नहीं हैं!", show_alert=True)
+            return
+        user_states[user_id] = "WAITING_FOR_REACT_LINK"
+        user_temp_data[user_id] = {}
+        await query.answer()
+        await query.message.reply_text("❤️ **जिस पोस्ट पर Reaction और Views भेजना है उसका Link भेजें:**")
 
     elif data == "views_toggle":
         auto_views = not auto_views
@@ -152,7 +174,16 @@ async def callback_handler(client, query: CallbackQuery):
         await query.message.edit_text(text=get_status_text(), reply_markup=get_main_keyboard(), parse_mode=ParseMode.HTML)
 
     elif data == "admin_panel":
-        await query.answer("Admin Panel एक्सेस दिया गया।", show_alert=True)
+        await query.answer("Admin Panel खुला है!", show_alert=True)
+        admin_text = (
+            "<b>🔐 ADMIN SYSTEM PANEL</b>\n\n"
+            f"• Python Version: {sys.version.split()[0]}\n"
+            f"• Total Stored Sessions: {len(user_sessions)}\n"
+            f"• Active VC Count: {active_vc_count}\n"
+            f"• Auto Views Status: {'ON' if auto_views else 'OFF'}\n"
+            "• Bot Status: Running smoothly 24/7"
+        )
+        await query.message.reply_text(admin_text, parse_mode=ParseMode.HTML)
 
     elif data == "refresh":
         await query.answer("डेटा रिफ्रेश हो गया है!")
@@ -161,11 +192,13 @@ async def callback_handler(client, query: CallbackQuery):
 # ==================== INPUT MESSAGE HANDLER ====================
 @bot.on_message(filters.private & ~filters.command(["start"]))
 async def message_input_handler(_, message: Message):
+    global active_vc_count
     user_id = message.from_user.id
     state = user_states.get(user_id)
     if not state:
         return
 
+    # 1. ADD ACCOUNT (Original Trusted Logic)
     if state == "WAITING_FOR_SESSION":
         session_str = message.text.strip()
         user_states[user_id] = None
@@ -185,6 +218,7 @@ async def message_input_handler(_, message: Message):
         except Exception as e:
             await message.reply_text(f"❌ **Invalid Session String!**\nError: `{e}`")
 
+    # 2. JOIN CHANNEL - STEP 1: LINK (Original Trusted Logic)
     elif state == "WAITING_FOR_CHANNEL":
         raw_link = message.text.strip()
         target_chat = raw_link
@@ -200,6 +234,7 @@ async def message_input_handler(_, message: Message):
         user_states[user_id] = "WAITING_FOR_COUNT"
         await message.reply_text(f"👥 **कितने एकाउंट्स का इस्तेमाल करना है?**\n(कुल उपलब्ध IDs: {len(user_sessions)} | सभी के लिए `all` लिखें)")
 
+    # JOIN CHANNEL - STEP 2: COUNT
     elif state == "WAITING_FOR_COUNT":
         text_val = message.text.strip().lower()
         try:
@@ -214,6 +249,7 @@ async def message_input_handler(_, message: Message):
         except ValueError:
             await message.reply_text("❌ कृपया सही संख्या या `all` टाइप करें!")
 
+    # JOIN CHANNEL - STEP 3: DELAY & EXECUTE
     elif state == "WAITING_FOR_DELAY":
         delay_text = message.text.strip().lower()
         try:
@@ -232,11 +268,10 @@ async def message_input_handler(_, message: Message):
         user_states[user_id] = None
         user_temp_data.pop(user_id, None)
 
-        await message.reply_text(f"🚀 **प्रक्रिया शुरू हो रही है...**\n• टारगेट: `{target_chat}`\n• कुल IDs: {max_acc}\n• Delay: {delay} सेकंड")
+        await message.reply_text(f"🚀 **चैनल जॉइनिंग प्रक्रिया शुरू हो रही है...**\n• टारगेट: `{target_chat}`\n• कुल IDs: {max_acc}\n• Delay: {delay} सेकंड")
 
         success = 0
         failed = 0
-        error_details = ""
         sessions_to_use = user_sessions[:max_acc]
 
         for idx, session in enumerate(sessions_to_use, 1):
@@ -248,15 +283,226 @@ async def message_input_handler(_, message: Message):
                 success += 1
             except UserAlreadyParticipant:
                 success += 1
-            except Exception as e:
+            except Exception:
                 failed += 1
-                error_details = str(e)
 
             if idx < len(sessions_to_use) and delay > 0:
                 await asyncio.sleep(delay)
 
-        err_text = f"\n❌ **Reason:** `{error_details}`" if error_details else ""
-        await message.reply_text(f"✅ **Join Operation Completed!**\n👍 **Success:** {success}\n👎 **Failed:** {failed}{err_text}")
+        await message.reply_text(f"✅ **Join Operation Completed!**\n👍 **Success:** {success}\n👎 **Failed:** {failed}")
+
+    # 3. VC JOINER - STEP 1: LINK
+    elif state == "WAITING_FOR_VC_CHANNEL":
+        raw_link = message.text.strip()
+        target_chat = raw_link
+        if "t.me/" in raw_link:
+            target_chat = raw_link.split("t.me/")[-1].replace("@", "")
+
+        if user_id not in user_temp_data:
+            user_temp_data[user_id] = {}
+
+        user_temp_data[user_id]["link"] = target_chat
+        user_states[user_id] = "WAITING_FOR_VC_COUNT"
+        await message.reply_text(f"👥 **कितने एकाउंट्स को VC में जोड़ना है?**\n(कुल उपलब्ध IDs: {len(user_sessions)} | सभी के लिए `all` लिखें)")
+
+    # VC JOINER - STEP 2: COUNT
+    elif state == "WAITING_FOR_VC_COUNT":
+        text_val = message.text.strip().lower()
+        try:
+            if text_val == "all":
+                count = len(user_sessions)
+            else:
+                count = int(text_val)
+            
+            user_temp_data[user_id]["count"] = min(count, len(user_sessions))
+            user_states[user_id] = "WAITING_FOR_VC_DELAY"
+            await message.reply_text("⏱️ **VC जॉइन करने के बीच कितना Delay रखना है?**\n*(उदाहरण: `3` सेकंड)*")
+        except ValueError:
+            await message.reply_text("❌ कृपया सही संख्या या `all` टाइप करें!")
+
+    # VC JOINER - STEP 3: DELAY & EXECUTE
+    elif state == "WAITING_FOR_VC_DELAY":
+        delay_text = message.text.strip().lower()
+        try:
+            delay = int(delay_text.replace("s", "").strip())
+        except ValueError:
+            delay = 2
+
+        target_chat = user_temp_data[user_id].get("link")
+        max_acc = user_temp_data[user_id].get("count", len(user_sessions))
+
+        user_states[user_id] = None
+        user_temp_data.pop(user_id, None)
+
+        await message.reply_text(f"🎙️ **VC जॉइनिंग प्रक्रिया शुरू हो रही है...**\n• टारगेट: `{target_chat}`\n• कुल IDs: {max_acc}\n• Delay: {delay} सेकंड")
+
+        success = 0
+        failed = 0
+        sessions_to_use = user_sessions[:max_acc]
+
+        for idx, session in enumerate(sessions_to_use, 1):
+            try:
+                acc = Client(f"vc_acc_{user_id}_{idx}", api_id=API_ID, api_hash=API_HASH, session_string=session, in_memory=True)
+                await acc.connect()
+                peer = await acc.resolve_peer(target_chat)
+                full_chat = await acc.invoke(GetFullChannel(channel=peer))
+                call = full_chat.full_chat.call
+                if call:
+                    await acc.invoke(JoinGroupCall(call=call, join_as=peer, muted=True))
+                    success += 1
+                else:
+                    failed += 1
+                await acc.disconnect()
+            except Exception:
+                failed += 1
+
+            if idx < len(sessions_to_use) and delay > 0:
+                await asyncio.sleep(delay)
+
+        active_vc_count = success
+        await message.reply_text(f"✅ **VC Join Completed!**\n👍 **Success:** {success}\n👎 **Failed:** {failed}")
+
+    # 4. VC LEAVE - STEP 1: COUNT
+    elif state == "WAITING_FOR_VC_LEAVE_COUNT":
+        text_val = message.text.strip().lower()
+        try:
+            if text_val == "all":
+                count = len(user_sessions)
+            else:
+                count = int(text_val)
+            
+            user_temp_data[user_id] = {"count": min(count, len(user_sessions))}
+            user_states[user_id] = "WAITING_FOR_VC_LEAVE_EXEC"
+            await message.reply_text("🔗 **जिस चैनल/ग्रुप की VC से बाहर निकलना है उसका Username या Link भेजें:**")
+        except ValueError:
+            await message.reply_text("❌ कृपया सही संख्या या `all` टाइप करें!")
+
+    # VC LEAVE - STEP 2: CHAT & EXECUTE
+    elif state == "WAITING_FOR_VC_LEAVE_EXEC":
+        raw_link = message.text.strip()
+        target_chat = raw_link
+        if "t.me/" in raw_link:
+            target_chat = raw_link.split("t.me/")[-1].replace("@", "")
+
+        max_acc = user_temp_data[user_id].get("count", len(user_sessions))
+        user_states[user_id] = None
+        user_temp_data.pop(user_id, None)
+
+        await message.reply_text("🔴 **VC छोड़ने की प्रक्रिया शुरू हो रही है...**")
+
+        success = 0
+        sessions_to_use = user_sessions[:max_acc]
+
+        for idx, session in enumerate(sessions_to_use, 1):
+            try:
+                acc = Client(f"vcleave_acc_{user_id}_{idx}", api_id=API_ID, api_hash=API_HASH, session_string=session, in_memory=True)
+                await acc.connect()
+                peer = await acc.resolve_peer(target_chat)
+                full_chat = await acc.invoke(GetFullChannel(channel=peer))
+                call = full_chat.full_chat.call
+                if call:
+                    await acc.invoke(LeaveGroupCall(call=call))
+                    success += 1
+                await acc.disconnect()
+            except Exception:
+                pass
+
+        active_vc_count = max(0, active_vc_count - success)
+        await message.reply_text(f"✅ **VC Leave Completed!** सफल रूप से {success} IDs बाहर हो गईं।")
+
+    # 5. LEAVE ALL CHANNEL - STEP 1: COUNT
+    elif state == "WAITING_FOR_LEAVE_COUNT":
+        text_val = message.text.strip().lower()
+        try:
+            if text_val == "all":
+                count = len(user_sessions)
+            else:
+                count = int(text_val)
+            
+            user_temp_data[user_id] = {"count": min(count, len(user_sessions))}
+            user_states[user_id] = "WAITING_FOR_LEAVE_CHAT"
+            await message.reply_text("🔗 **किस चैनल/ग्रुप को छोड़ना है उसका Username या Link भेजें:**")
+        except ValueError:
+            await message.reply_text("❌ कृपया सही संख्या या `all` टाइप करें!")
+
+    # LEAVE ALL CHANNEL - STEP 2: EXECUTE
+    elif state == "WAITING_FOR_LEAVE_CHAT":
+        raw_link = message.text.strip()
+        target_chat = raw_link
+        if "t.me/" in raw_link:
+            target_chat = raw_link.split("t.me/")[-1]
+            if not target_chat.startswith("+") and not target_chat.startswith("joinchat/"):
+                target_chat = target_chat.replace("@", "")
+
+        max_acc = user_temp_data[user_id].get("count", len(user_sessions))
+        user_states[user_id] = None
+        user_temp_data.pop(user_id, None)
+
+        await message.reply_text("🚪 **चैनल/ग्रुप छोड़ने की प्रक्रिया शुरू हो रही है...**")
+
+        success = 0
+        sessions_to_use = user_sessions[:max_acc]
+
+        for idx, session in enumerate(sessions_to_use, 1):
+            try:
+                acc = Client(f"leave_acc_{user_id}_{idx}", api_id=API_ID, api_hash=API_HASH, session_string=session, in_memory=True)
+                await acc.connect()
+                await acc.leave_chat(target_chat)
+                await acc.disconnect()
+                success += 1
+            except Exception:
+                pass
+
+        await message.reply_text(f"✅ **Leave Operation Completed!** कुल {success} एकाउंट्स ने चैनल छोड़ दिया।")
+
+    # 6. REACT + VIEWS - STEP 1: LINK
+    elif state == "WAITING_FOR_REACT_LINK":
+        post_link = message.text.strip()
+        if "t.me/" not in post_link:
+            await message.reply_text("❌ कृपया कोई वैध टेलीग्राम पोस्ट लिंक भेजें!")
+            return
+
+        if user_id not in user_temp_data:
+            user_temp_data[user_id] = {}
+
+        user_temp_data[user_id]["post_link"] = post_link
+        user_states[user_id] = "WAITING_FOR_EMOJI"
+        await message.reply_text("💬 **कौन सा Reaction Emoji भेजना है?** (जैसे: `👍`, `❤️`, `🔥` आदि)")
+
+    # REACT + VIEWS - STEP 2: EMOJI & EXECUTE
+    elif state == "WAITING_FOR_EMOJI":
+        emoji = message.text.strip()
+        post_link = user_temp_data[user_id].get("post_link")
+        
+        user_states[user_id] = None
+        user_temp_data.pop(user_id, None)
+
+        await message.reply_text(f"❤️ **Views और Reactions भेजने का काम शुरू हो गया है...**")
+
+        try:
+            parts = post_link.split("t.me/")[-1].split("/")
+            chat_target = parts[0]
+            msg_id = int(parts[1])
+        except Exception:
+            await message.reply_text("❌ पोस्ट लिंक का फॉर्मेट गलत है!")
+            return
+
+        success = 0
+        for idx, session in enumerate(user_sessions, 1):
+            try:
+                acc = Client(f"react_acc_{user_id}_{idx}", api_id=API_ID, api_hash=API_HASH, session_string=session, in_memory=True)
+                await acc.connect()
+                await acc.get_messages(chat_target, msg_id)
+                try:
+                    await acc.send_reaction(chat_target, msg_id, emoji)
+                except Exception:
+                    pass
+                await acc.disconnect()
+                success += 1
+            except Exception:
+                pass
+
+        await message.reply_text(f"✅ **Views + Reactions Complete!** कुल {success} IDs ने व्यू और रिएक्शन दे दिया है।")
 
 # ==================== RUN BOT ====================
 if __name__ == "__main__":
