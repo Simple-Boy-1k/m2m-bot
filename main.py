@@ -10,7 +10,7 @@ from pyrogram.raw import functions
 # ==================== CONFIGURATION ====================
 API_ID = 31551910
 API_HASH = "c2e8e7946d5e4ea947d44b674008f33e"
-BOT_TOKEN = "8595762999:AAHmNthQFpGot6_MWtW00lB7xMRztmYHz1I"
+BOT_TOKEN = "8595762999:AAHNgNIHeWZLvcp5zr_6zJ3TTxe7u3aXpa8"
 
 SESSIONS_FILE = "sessions.json"
 
