@@ -9,7 +9,7 @@ from pyrogram.errors import UserAlreadyParticipant
 # ==================== CONFIGURATION ====================
 API_ID = 31551910
 API_HASH = "c2e8e7946d5e4ea947d44b674008f33e"
-BOT_TOKEN = "8595762999:AAFaOJlhG0lAqyA1Xr7Lx3hqY4DR-dDi39M"
+BOT_TOKEN = "8595762999:AAHmNthQFpGot6_MWtW00lB7xMRztmYHz1I"
 
 # 🔴 आपकी Telegram User ID यहाँ सेट कर दी गई है
 ADMIN_IDS = [8237346239]
