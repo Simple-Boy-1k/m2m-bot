@@ -11,7 +11,7 @@ API_ID = 31551910
 API_HASH = "c2e8e7946d5e4ea947d44b674008f33e"
 BOT_TOKEN = "8595762999:AAHmNthQFpGot6_MWtW00lB7xMRztmYHz1I"
 
-# 🔴 आपकी Telegram User ID यहाँ सेट कर दी गई है
+# 🔴 आपकी Telegram User ID 
 ADMIN_IDS = [8237346239]
 
 SESSIONS_FILE = "sessions.json"
@@ -183,9 +183,12 @@ async def message_input_handler(_, message: Message):
         return
 
     state = user_states.get(user_id)
+    if not state:
+        return
 
     if state == "WAITING_FOR_SESSION":
         session_str = message.text.strip()
+        user_states[user_id] = None
         try:
             acc = Client("verify_acc", api_id=API_ID, api_hash=API_HASH, session_string=session_str, in_memory=True)
             await acc.connect()
@@ -202,8 +205,6 @@ async def message_input_handler(_, message: Message):
         except Exception as e:
             await message.reply_text(f"❌ **Invalid Session String!**\nError: `{e}`")
 
-        user_states[user_id] = None
-
     elif state == "WAITING_FOR_CHANNEL":
         raw_link = message.text.strip()
         target_chat = raw_link
@@ -211,6 +212,9 @@ async def message_input_handler(_, message: Message):
             target_chat = raw_link.split("t.me/")[-1]
             if not target_chat.startswith("+") and not target_chat.startswith("joinchat/"):
                 target_chat = target_chat.replace("@", "")
+
+        if user_id not in user_temp_data:
+            user_temp_data[user_id] = {}
 
         user_temp_data[user_id]["link"] = target_chat
         user_states[user_id] = "WAITING_FOR_COUNT"
@@ -242,8 +246,11 @@ async def message_input_handler(_, message: Message):
         except ValueError:
             delay = 2
 
-        target_chat = user_temp_data[user_id]["link"]
-        max_acc = user_temp_data[user_id]["count"]
+        target_chat = user_temp_data[user_id].get("link")
+        max_acc = user_temp_data[user_id].get("count", len(user_sessions))
+
+        user_states[user_id] = None
+        user_temp_data.pop(user_id, None)
 
         await message.reply_text(f"🚀 **प्रक्रिया शुरू हो रही है...**\n• टारगेट: `{target_chat}`\n• कुल IDs: {max_acc}\n• Delay: {delay} सेकंड")
 
@@ -254,7 +261,7 @@ async def message_input_handler(_, message: Message):
 
         for idx, session in enumerate(sessions_to_use, 1):
             try:
-                acc = Client(f"join_acc_{idx}", api_id=API_ID, api_hash=API_HASH, session_string=session, in_memory=True)
+                acc = Client(f"join_acc_{user_id}_{idx}", api_id=API_ID, api_hash=API_HASH, session_string=session, in_memory=True)
                 await acc.connect()
                 await acc.join_chat(target_chat)
                 await acc.disconnect()
@@ -270,9 +277,6 @@ async def message_input_handler(_, message: Message):
 
         err_text = f"\n❌ **Reason:** `{error_details}`" if error_details else ""
         await message.reply_text(f"✅ **Join Operation Completed!**\n👍 **Success:** {success}\n👎 **Failed:** {failed}{err_text}")
-
-        user_states[user_id] = None
-        user_temp_data.pop(user_id, None)
 
 # ==================== RUN BOT ====================
 async def main():
