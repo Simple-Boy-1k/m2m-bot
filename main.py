@@ -1,6 +1,7 @@
 import json
 import os
-from pyrogram import Client, filters
+import asyncio
+from pyrogram import Client, filters, idle
 from pyrogram.enums import ParseMode
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery, Message
 from pyrogram.errors import UserAlreadyParticipant
@@ -10,6 +11,9 @@ API_ID = 31551910
 API_HASH = "c2e8e7946d5e4ea947d44b674008f33e"
 BOT_TOKEN = "8595762999:AAFaOJlhG0lAqyA1Xr7Lx3hqY4DR-dDi39M"
 
+# 🔴 अपनी Telegram User ID यहाँ डालें
+ADMIN_IDS = [8237346239]  # <--- अपनी असली Telegram ID यहाँ लिखें!
+
 SESSIONS_FILE = "sessions.json"
 
 # ==================== GLOBAL DATA ====================
@@ -17,6 +21,7 @@ user_sessions = []
 active_vc_count = 0
 auto_views = True
 user_states = {}
+user_temp_data = {}  # लिंक, काउंट और डिले स्टोर करने के लिए
 
 def load_sessions():
     global user_sessions
@@ -77,7 +82,20 @@ def get_status_text():
 # ==================== COMMAND HANDLERS ====================
 @bot.on_message(filters.command("start") & filters.private)
 async def start_cmd(_, message: Message):
-    user_states[message.from_user.id] = None
+    user_id = message.from_user.id
+    
+    if user_id not in ADMIN_IDS:
+        owner_keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("👨‍💻 CONTACT OWNER", url="https://t.me/Simple_Boy_1k")]
+        ])
+        await message.reply_text(
+            "❌ **Access Denied!**\n\nआप इस बॉट के ओनर या एडमिन नहीं हैं।\n\nअगर आपको अपना बॉट बनवाना है या कोई जानकारी चाहिए, तो ओनर से संपर्क करें।",
+            reply_markup=owner_keyboard,
+            parse_mode=ParseMode.MARKDOWN
+        )
+        return
+
+    user_states[user_id] = None
     await message.reply_text(
         text=get_status_text(),
         reply_markup=get_main_keyboard(),
@@ -88,8 +106,13 @@ async def start_cmd(_, message: Message):
 @bot.on_callback_query()
 async def callback_handler(client, query: CallbackQuery):
     global auto_views, active_vc_count, user_sessions
-    data = query.data
     user_id = query.from_user.id
+
+    if user_id not in ADMIN_IDS:
+        await query.answer("❌ आप इस बॉट के Admin नहीं हैं!", show_alert=True)
+        return
+
+    data = query.data
 
     if data == "add_account":
         user_states[user_id] = "WAITING_FOR_SESSION"
@@ -101,6 +124,7 @@ async def callback_handler(client, query: CallbackQuery):
             await query.answer("❌ कोई भी एकाउंट्स ऐड नहीं हैं!", show_alert=True)
             return
         user_states[user_id] = "WAITING_FOR_CHANNEL"
+        user_temp_data[user_id] = {}
         await query.answer()
         await query.message.reply_text("🔗 **जिस चैनल/ग्रुप में जोड़ना है उसका Username या Invite Link भेजें:**")
 
@@ -141,11 +165,11 @@ async def callback_handler(client, query: CallbackQuery):
     elif data == "views_toggle":
         auto_views = not auto_views
         status = "चालू" if auto_views else "बंद"
-        await query.answer(f"Auto-Views अब ${status} कर दिया गया है!", show_alert=True)
+        await query.answer(f"Auto-Views अब {status} कर दिया गया है!", show_alert=True)
         await query.message.edit_text(text=get_status_text(), reply_markup=get_main_keyboard(), parse_mode=ParseMode.HTML)
 
     elif data == "admin_panel":
-        await query.answer("Admin Panel एक्सेस दिया गया।", show_alert=True)
+        await query.answer(f"🔐 Admin Panel\nआपकी ID: {user_id}\nकुल Admins: {len(ADMIN_IDS)}", show_alert=True)
 
     elif data == "refresh":
         await query.answer("डेटा रिफ्रेश हो गया है!")
@@ -155,6 +179,9 @@ async def callback_handler(client, query: CallbackQuery):
 @bot.on_message(filters.private & ~filters.command(["start"]))
 async def message_input_handler(_, message: Message):
     user_id = message.from_user.id
+    if user_id not in ADMIN_IDS:
+        return
+
     state = user_states.get(user_id)
 
     if state == "WAITING_FOR_SESSION":
@@ -179,21 +206,55 @@ async def message_input_handler(_, message: Message):
 
     elif state == "WAITING_FOR_CHANNEL":
         raw_link = message.text.strip()
-        await message.reply_text("⏳ **सभी एकाउंट्स को ज्वाइन कराया जा रहा है...**")
-        
         target_chat = raw_link
         if "t.me/" in raw_link:
             target_chat = raw_link.split("t.me/")[-1]
             if not target_chat.startswith("+") and not target_chat.startswith("joinchat/"):
                 target_chat = target_chat.replace("@", "")
 
+        user_temp_data[user_id]["link"] = target_chat
+        user_states[user_id] = "WAITING_FOR_COUNT"
+        await message.reply_text(f"👥 **कितने एकाउंट्स का इस्तेमाल करना है?**\n(कुल उपलब्ध IDs: {len(user_sessions)} | सभी के लिए `all` लिखें)")
+
+    elif state == "WAITING_FOR_COUNT":
+        text_val = message.text.strip().lower()
+        try:
+            if text_val == "all":
+                count = len(user_sessions)
+            else:
+                count = int(text_val)
+            
+            user_temp_data[user_id]["count"] = min(count, len(user_sessions))
+            user_states[user_id] = "WAITING_FOR_DELAY"
+            await message.reply_text("⏱️ **हर रिक्वेस्ट के बीच कितना Delay रखना है?**\n*(उदाहरण: `5` सेकंड के लिए या `1m` 1 मिनट के लिए)*")
+        except ValueError:
+            await message.reply_text("❌ कृपया सही संख्या या `all` टाइप करें!")
+
+    elif state == "WAITING_FOR_DELAY":
+        delay_text = message.text.strip().lower()
+        try:
+            if "m" in delay_text:
+                delay = int(delay_text.replace("m", "").strip()) * 60
+            elif "s" in delay_text:
+                delay = int(delay_text.replace("s", "").strip())
+            else:
+                delay = int(delay_text)
+        except ValueError:
+            delay = 2  # Default fallback 2 seconds
+
+        target_chat = user_temp_data[user_id]["link"]
+        max_acc = user_temp_data[user_id]["count"]
+
+        await message.reply_text(f"🚀 **प्रक्रिया शुरू हो रही है...**\n• टारगेट: `{target_chat}`\n• कुल IDs: {max_acc}\n• Delay: {delay} सेकंड")
+
         success = 0
         failed = 0
         error_details = ""
+        sessions_to_use = user_sessions[:max_acc]
 
-        for session in user_sessions:
+        for idx, session in enumerate(sessions_to_use, 1):
             try:
-                acc = Client("join_acc", api_id=API_ID, api_hash=API_HASH, session_string=session, in_memory=True)
+                acc = Client(f"join_acc_{idx}", api_id=API_ID, api_hash=API_HASH, session_string=session, in_memory=True)
                 await acc.connect()
                 await acc.join_chat(target_chat)
                 await acc.disconnect()
@@ -204,11 +265,22 @@ async def message_input_handler(_, message: Message):
                 failed += 1
                 error_details = str(e)
 
+            # अगर आखिरी अकाउंट नहीं है, तो तय किया गया delay दें
+            if idx < len(sessions_to_use) and delay > 0:
+                await asyncio.sleep(delay)
+
         err_text = f"\n❌ **Reason:** `{error_details}`" if error_details else ""
-        await message.reply_text(f"🚀 **Join Operation Completed!**\n✅ **Success:** {success}\n❌ **Failed:** {failed}{err_text}")
+        await message.reply_text(f"✅ **Join Operation Completed!**\n👍 **Success:** {success}\n👎 **Failed:** {failed}{err_text}")
+
         user_states[user_id] = None
+        user_temp_data.pop(user_id, None)
 
 # ==================== RUN BOT ====================
+async def main():
+    await bot.start()
+    print("🤖 M2M Control Bot सफलतापूर्वक चालू हो गया है!")
+    await idle()
+    await bot.stop()
+
 if __name__ == "__main__":
-    print("🤖 M2M Control Bot चालू हो रहा है...")
-    bot.run()
+    asyncio.run(main())
