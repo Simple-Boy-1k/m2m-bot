@@ -200,7 +200,7 @@ async def message_input_handler(_, message: Message):
             except Exception:
                 failed += 1
 
-        await message.reply_text(f"🚀 **Join Operation Completed!**\n✅ **Failed:** {failed}\n❌ **Success:** {success}")
+        await message.reply_text(f"🚀 **Join Operation Completed!**\n✅ **Success:** {failed}\n❌ **Failed:** {success}")
         user_states[user_id] = None
 
 # ==================== RUN BOT ====================
