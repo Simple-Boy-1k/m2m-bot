@@ -21,6 +21,7 @@ user_sessions = []
 active_vc_count = 0
 auto_views = True
 user_states = {}
+user_temp_data = {}
 
 def load_sessions():
     global user_sessions
@@ -81,7 +82,8 @@ def get_status_text():
 # ==================== COMMAND HANDLERS ====================
 @bot.on_message(filters.command("start") & filters.private)
 async def start_cmd(_, message: Message):
-    user_states[message.from_user.id] = None
+    user_id = message.from_user.id
+    user_states[user_id] = None
     await message.reply_text(
         text=get_status_text(),
         reply_markup=get_main_keyboard(),
@@ -105,6 +107,7 @@ async def callback_handler(client, query: CallbackQuery):
             await query.answer("❌ कोई भी एकाउंट्स ऐड नहीं हैं!", show_alert=True)
             return
         user_states[user_id] = "WAITING_FOR_CHANNEL"
+        user_temp_data[user_id] = {}
         await query.answer()
         await query.message.reply_text("🔗 **जिस चैनल/ग्रुप में जोड़ना है उसका Username या Invite Link भेजें:**")
 
@@ -160,9 +163,12 @@ async def callback_handler(client, query: CallbackQuery):
 async def message_input_handler(_, message: Message):
     user_id = message.from_user.id
     state = user_states.get(user_id)
+    if not state:
+        return
 
     if state == "WAITING_FOR_SESSION":
         session_str = message.text.strip()
+        user_states[user_id] = None
         try:
             acc = Client("verify_acc", api_id=API_ID, api_hash=API_HASH, session_string=session_str, in_memory=True)
             await acc.connect()
@@ -179,29 +185,78 @@ async def message_input_handler(_, message: Message):
         except Exception as e:
             await message.reply_text(f"❌ **Invalid Session String!**\nError: `{e}`")
 
-        user_states[user_id] = None
-
     elif state == "WAITING_FOR_CHANNEL":
-        chat_id = message.text.strip()
-        await message.reply_text("⏳ **सभी एकाउंट्स को ज्वाइन कराया जा रहा है...**")
-        
+        raw_link = message.text.strip()
+        target_chat = raw_link
+        if "t.me/" in raw_link:
+            target_chat = raw_link.split("t.me/")[-1]
+            if not target_chat.startswith("+") and not target_chat.startswith("joinchat/"):
+                target_chat = target_chat.replace("@", "")
+
+        if user_id not in user_temp_data:
+            user_temp_data[user_id] = {}
+
+        user_temp_data[user_id]["link"] = target_chat
+        user_states[user_id] = "WAITING_FOR_COUNT"
+        await message.reply_text(f"👥 **कितने एकाउंट्स का इस्तेमाल करना है?**\n(कुल उपलब्ध IDs: {len(user_sessions)} | सभी के लिए `all` लिखें)")
+
+    elif state == "WAITING_FOR_COUNT":
+        text_val = message.text.strip().lower()
+        try:
+            if text_val == "all":
+                count = len(user_sessions)
+            else:
+                count = int(text_val)
+            
+            user_temp_data[user_id]["count"] = min(count, len(user_sessions))
+            user_states[user_id] = "WAITING_FOR_DELAY"
+            await message.reply_text("⏱️ **हर रिक्वेस्ट के बीच कितना Delay रखना है?**\n*(उदाहरण: `5` सेकंड के लिए या `1m` 1 मिनट के लिए)*")
+        except ValueError:
+            await message.reply_text("❌ कृपया सही संख्या या `all` टाइप करें!")
+
+    elif state == "WAITING_FOR_DELAY":
+        delay_text = message.text.strip().lower()
+        try:
+            if "m" in delay_text:
+                delay = int(delay_text.replace("m", "").strip()) * 60
+            elif "s" in delay_text:
+                delay = int(delay_text.replace("s", "").strip())
+            else:
+                delay = int(delay_text)
+        except ValueError:
+            delay = 2
+
+        target_chat = user_temp_data[user_id].get("link")
+        max_acc = user_temp_data[user_id].get("count", len(user_sessions))
+
+        user_states[user_id] = None
+        user_temp_data.pop(user_id, None)
+
+        await message.reply_text(f"🚀 **प्रक्रिया शुरू हो रही है...**\n• टारगेट: `{target_chat}`\n• कुल IDs: {max_acc}\n• Delay: {delay} सेकंड")
+
         success = 0
         failed = 0
+        error_details = ""
+        sessions_to_use = user_sessions[:max_acc]
 
-        for session in user_sessions:
+        for idx, session in enumerate(sessions_to_use, 1):
             try:
-                acc = Client("join_acc", api_id=API_ID, api_hash=API_HASH, session_string=session, in_memory=True)
+                acc = Client(f"join_acc_{user_id}_{idx}", api_id=API_ID, api_hash=API_HASH, session_string=session, in_memory=True)
                 await acc.connect()
-                await acc.join_chat(chat_id)
+                await acc.join_chat(target_chat)
                 await acc.disconnect()
                 success += 1
             except UserAlreadyParticipant:
                 success += 1
-            except Exception:
+            except Exception as e:
                 failed += 1
+                error_details = str(e)
 
-        await message.reply_text(f"🚀 **Join Operation Completed!**\n✅ **Failed:** {failed}\n❌ **Success:** {success}")
-        user_states[user_id] = None
+            if idx < len(sessions_to_use) and delay > 0:
+                await asyncio.sleep(delay)
+
+        err_text = f"\n❌ **Reason:** `{error_details}`" if error_details else ""
+        await message.reply_text(f"✅ **Join Operation Completed!**\n👍 **Success:** {success}\n👎 **Failed:** {failed}{err_text}")
 
 # ==================== RUN BOT ====================
 if __name__ == "__main__":
