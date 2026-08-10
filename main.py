@@ -205,5 +205,8 @@ async def message_input_handler(_, message: Message):
 
 # ==================== RUN BOT ====================
 if __name__ == "__main__":
+    import asyncio
     print("🤖 M2M Control Bot चालू हो रहा है...")
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
     bot.run()
