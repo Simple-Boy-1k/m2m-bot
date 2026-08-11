@@ -4,17 +4,17 @@
 
 <p align="center">
   <a href="https://git.io/typing-svg">
-    <img src="https://readme-typing-svg.herokuapp.com/?font=Fira+Code&size=22&color=00BFFF&center=true&vCenter=true&width=500&height=50&lines=SARKAR+MOD+M2M+BOT;VOICE+CHAT+AND+STREAM+JOINER;POWERED+BY+MONGODB" alt="Typing SVG" />
+    <img src="https://readme-typing-svg.herokuapp.com/?font=Fira+Code&size=22&color=00BFFF&center=true&vCenter=true&width=100%25&height=50&lines=SARKAR+MOD+M2M+BOT;VOICE+CHAT+AND+STREAM+JOINER;POWERED+BY+MONGODB" width="100%" alt="Typing SVG" />
   </a>
 </p>
 
 <p align="center">
-  <img src="https://files.catbox.moe/xeehik.png" width="550" alt="SARKAR MOD BANNER">
+  <img src="https://files.catbox.moe/xeehik.png" width="100%" alt="SARKAR MOD BANNER">
 </p>
 
 <p align="center">
   <a href="https://git.io/typing-svg">
-    <img src="https://readme-typing-svg.herokuapp.com/?font=Fira+Code&size=18&color=00E5FF&center=true&vCenter=true&width=500&height=40&lines=FORK+THIS+REPO+BEFORE+DEPLOYING!" alt="Typing SVG" />
+    <img src="https://readme-typing-svg.herokuapp.com/?font=Fira+Code&size=18&color=00E5FF&center=true&vCenter=true&width=100%25&height=40&lines=FORK+THIS+REPO+BEFORE+DEPLOYING!" width="100%" alt="Typing SVG" />
   </a>
 </p>
 
@@ -58,4 +58,4 @@
 
 ### ✍️ Credits & Support
 
-* **Developer & Owner**: [𝙎𝘼𝙍𝙆𝘼𝙍](https://t.me/Simple_Boy_1k)
+* **Developer & Owner**: [𝙎𝘼𝙍𝙆𝘼𝙍](https://t.me/YOUR_TELEGRAM_USERNAME)
