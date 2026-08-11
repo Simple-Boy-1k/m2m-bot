@@ -18,23 +18,30 @@ from pyrogram.raw import functions, types
 # Logging setup
 logging.basicConfig(level=logging.INFO)
 
-# ==================== CONFIGURATION (FROM ENVIRONMENT VARS ONLY) ====================
-try:
-    API_ID = int(os.environ.get("API_ID", "0"))
-    API_HASH = os.environ.get("API_HASH")
-    BOT_TOKEN = os.environ.get("BOT_TOKEN")
-    OWNER_ID = int(os.environ.get("OWNER_ID", "0"))
-    MONGO_URL = os.environ.get("MONGO_URL")
-except ValueError:
-    raise ValueError("API_ID aur OWNER_ID valid numbers hone chahiye!")
+# ==================== CONFIGURATION (DEBUG VERIFIED) ====================
+API_ID_RAW = os.environ.get("API_ID")
+API_HASH = os.environ.get("API_HASH")
+BOT_TOKEN = os.environ.get("BOT_TOKEN")
+OWNER_ID_RAW = os.environ.get("OWNER_ID")
+MONGO_URL = os.environ.get("MONGO_URL")
 
-# Safety Check: Heroku Config Vars Validation
-if not API_ID or not API_HASH or not BOT_TOKEN or not OWNER_ID or not MONGO_URL:
-    raise ValueError(
-        "CRITICAL ERROR: Secrets missing hain!\n"
-        "Heroku Settings -> Config Vars me jaakar API_ID, API_HASH, BOT_TOKEN, OWNER_ID aur MONGO_URL set karein."
-    )
-# ====================================================================================
+# Check exact missing variable
+missing_vars = []
+if not API_ID_RAW: missing_vars.append("API_ID")
+if not API_HASH: missing_vars.append("API_HASH")
+if not BOT_TOKEN: missing_vars.append("BOT_TOKEN")
+if not OWNER_ID_RAW: missing_vars.append("OWNER_ID")
+if not MONGO_URL: missing_vars.append("MONGO_URL")
+
+if missing_vars:
+    raise ValueError(f"CRITICAL ERROR: Heroku me ye missing hain -> {', '.join(missing_vars)}")
+
+try:
+    API_ID = int(API_ID_RAW.strip())
+    OWNER_ID = int(OWNER_ID_RAW.strip())
+except ValueError:
+    raise ValueError("API_ID aur OWNER_ID me sirf numbers hone chahiye!")
+# ========================================================================
 
 # MongoDB Connection Setup
 mongo_client = motor.motor_asyncio.AsyncIOMotorClient(MONGO_URL)
@@ -55,15 +62,12 @@ app = Client("account_manager_bot", api_id=API_ID, api_hash=API_HASH, bot_token=
 # -------------------- DATABASE LOADER --------------------
 
 async def load_data_from_db():
-    """Bot start hone par MongoDB se saare accounts aur admins auto-load honge"""
     global ADMIN_IDS, USERBOT_SESSIONS
     logging.info("MongoDB Database se data load ho raha hai...")
 
-    # Load Admins from Mongo
     async for admin_doc in admins_col.find():
         ADMIN_IDS.add(int(admin_doc["user_id"]))
 
-    # Load Userbot Sessions from Mongo
     loaded_count = 0
     async for session_doc in sessions_col.find():
         session_str = session_doc["session"]
@@ -74,7 +78,6 @@ async def load_data_from_db():
             loaded_count += 1
         except Exception as e:
             logging.error(f"Saved session invalid: {e}")
-            # Invalid session ko database se auto-delete karega
             await sessions_col.delete_one({"session": session_str})
 
     logging.info(f"Database sync complete! Total {loaded_count} accounts aur {len(ADMIN_IDS)} admins restored.")
@@ -85,7 +88,6 @@ async def load_data_from_db():
 async def join_target_chat(ubot, chat_link: str):
     chat_link = chat_link.strip()
     
-    # Private Link
     if "t.me/+" in chat_link or "joinchat/" in chat_link:
         if "t.me/+" in chat_link:
             invite_hash = chat_link.split("t.me/+")[-1].split("/")[0].split("?")[0]
@@ -100,7 +102,6 @@ async def join_target_chat(ubot, chat_link: str):
         except Exception as e:
             return False, None, str(e)
 
-    # Public Link
     else:
         username = chat_link.replace("https://t.me/", "").replace("http://t.me/", "").replace("@", "").split("/")[0].split("?")[0]
         try:
@@ -444,7 +445,6 @@ async def message_input_handler(client, message):
 
     text = message.text.strip()
 
-    # 1. ADD ACCOUNT (SAVE TO MONGO DB)
     if state == "WAITING_FOR_SESSION":
         try:
             temp_client = Client("ubot_temp", api_id=API_ID, api_hash=API_HASH, session_string=text, in_memory=True)
@@ -462,7 +462,6 @@ async def message_input_handler(client, message):
         except Exception as e:
             await message.reply_text(f"❌ **Invalid Session String:**\n`{str(e)}`\n\nDobara sahi string session bhejein.")
 
-    # 2. JOIN CHANNEL INPUT
     elif state == "WAITING_FOR_JOIN_LINK":
         USER_STATES.pop(user_id, None)
         msg = await message.reply_text("⏳ Processing accounts join...")
@@ -481,7 +480,6 @@ async def message_input_handler(client, message):
             detail_text += f"\n\n❌ **Error Detail:** {reasons[0]}"
         await msg.edit_text(detail_text)
 
-    # 3. VC JOINER INPUT
     elif state == "WAITING_FOR_VC_LINK":
         global ACTIVE_VC_COUNT
         USER_STATES.pop(user_id, None)
@@ -502,7 +500,6 @@ async def message_input_handler(client, message):
             resp_text += f"\n\n⚠️ **Reason:** {vc_errors[0]}"
         await msg.edit_text(resp_text)
 
-    # 4. REACT + VIEWS INPUT
     elif state == "WAITING_FOR_POST_LINK":
         USER_STATES.pop(user_id, None)
         try:
@@ -521,7 +518,6 @@ async def message_input_handler(client, message):
         except Exception:
             await message.reply_text("❌ Post Link Format galat hai!")
 
-    # 5. ADD ADMIN (SAVE TO MONGO DB)
     elif state == "WAITING_FOR_ADMIN_ID":
         if user_id == OWNER_ID and text.isdigit():
             new_id = int(text)
