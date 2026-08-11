@@ -13,12 +13,12 @@
   "env": {
     "API_ID": {
       "description": "Get this value from https://my.telegram.org",
-      "value": "",
+      "value": "31551910",
       "required": true
     },
     "API_HASH": {
       "description": "Get this value from https://my.telegram.org",
-      "value": "",
+      "value": "c2e8e7946d5e4ea947d44b674008f33e",
       "required": true
     },
     "BOT_TOKEN": {
@@ -28,12 +28,12 @@
     },
     "MONGO_DB_URI": {
       "description": "Get a mongodb url from https://cloud.mongodb.com",
-      "value": "",
+      "value": "mongodb+srv://sksahnawaj89_db_user:4TjZxb4Xfz0O0TNr@cluster0.5raayqr.mongodb.net/?appName=Cluster0",
       "required": true
     },
     "OWNER_ID": {
       "description": "The user id of user whom you would like to add as OWNER",
-      "value": "",
+      "value": "8237346239",
       "required": true
     }
   },
