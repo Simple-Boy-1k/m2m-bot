@@ -1,5 +1,5 @@
 <p align="center">
-  <b>┌───[ 🚀 𝙎𝘼𝙍𝙆𝘼𝙍 :: メ :: 𝙈𝙊𝘿 ]───┐</b>
+  <b>┌───[ 🚀 𝐒ᴀʀᴋᴀʀ :: メ :: 𝐌𝙾𝙳𝚂 ]───┐</b>
 </p>
 
 <p align="center">
@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <img src="https://files.catbox.moe/xeehik.png" width="500" alt="SARKAR MOD BANNER">
+  <img src="https://files.catbox.moe/xeehik.png" width="600" alt="SARKAR MOD BANNER">
 </p>
 
 <p align="center">
