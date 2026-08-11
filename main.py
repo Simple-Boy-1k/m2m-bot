@@ -97,19 +97,39 @@ async def load_data_from_db():
     logging.info(f"Database sync complete! Total {loaded_count} accounts aur {len(ADMIN_IDS)} admins restored.")
 
 
-# -------------------- HELPER FUNCTIONS (ULTRA-FAST ZERO DELAY) --------------------
+# -------------------- HELPER FUNCTIONS (ROBUST & WORKING) --------------------
 
 async def join_target_chat(ubot, chat_link: str):
     chat_link = chat_link.strip()
     try:
         chat = await ubot.join_chat(chat_link)
         return True, chat, "Joined Successfully"
-    except Exception:
+    except UserAlreadyParticipant:
+        try:
+            chat = await ubot.get_chat(chat_link)
+            return True, chat, "Already Joined"
+        except Exception:
+            return True, None, "Already Joined"
+    except InviteRequestSent:
+        return True, None, "Request Sent ⏳"
+    except FloodWait as e:
+        try:
+            await asyncio.sleep(min(e.value, 3))
+            chat = await ubot.join_chat(chat_link)
+            return True, chat, "Joined Successfully"
+        except Exception:
+            return False, None, "FloodWait Error"
+    except Exception as e:
+        err_str = str(e)
+        if "USER_ALREADY_PARTICIPANT" in err_str:
+            return True, None, "Already Joined"
+        if "INVITE_REQUEST_SENT" in err_str:
+            return True, None, "Request Sent ⏳"
         try:
             chat = await ubot.get_chat(chat_link)
             return True, chat, "Joined Successfully"
         except Exception:
-            return True, None, "Joined Successfully"
+            return False, None, err_str
 
 
 async def join_vc_session(ubot, chat_link: str):
@@ -142,8 +162,10 @@ async def join_vc_session(ubot, chat_link: str):
                     )
                 )
         return True, "VC Connected"
-    except Exception:
-        return True, "VC Connected"
+    except Exception as e:
+        if "GROUPCALL_ALREADY_JOINED" in str(e):
+            return True, "Already in VC"
+        return False, str(e)
 
 
 async def leave_vc_all():
@@ -153,7 +175,7 @@ async def leave_vc_all():
 
     left_count = 0
     target = CURRENT_VC_CHAT
-    CURRENT_VC_CHAT = None  # Stop keep-alive loop
+    CURRENT_VC_CHAT = None
 
     for session_str, ubot in list(USERBOT_SESSIONS.items()):
         try:
@@ -181,7 +203,6 @@ async def leave_vc_all():
 
 
 async def vc_keepalive_loop():
-    """Background task to keep accounts in VC 24/7 without getting dropped"""
     global ACTIVE_VC_COUNT
     while True:
         await asyncio.sleep(15)
@@ -232,7 +253,7 @@ def get_panel_text():
     )
 
 def get_main_keyboard():
-    enabled = BUTTON_COLOUR  # Yeh boolean True/False aayega config se
+    enabled = BUTTON_COLOUR
     return InlineKeyboardMarkup([
         [
             create_safe_button("➕ ADD ACCOUNT", "add_account", enabled),
@@ -495,7 +516,7 @@ async def callback_handler(client, callback_query: CallbackQuery):
         await callback_query.edit_message_text(text=get_panel_text(), reply_markup=get_main_keyboard())
 
 
-# -------------------- INPUT PROCESSING HANDLER (ZERO DELAY PARALLEL) --------------------
+# -------------------- INPUT PROCESSING HANDLER (SAFE SEQUENTIAL) --------------------
 
 @app.on_message(filters.private & ~filters.command(["start"]))
 async def message_input_handler(client, message):
@@ -526,27 +547,45 @@ async def message_input_handler(client, message):
 
     elif state == "WAITING_FOR_JOIN_LINK":
         USER_STATES.pop(user_id, None)
-        msg = await message.reply_text("⚡ Instant joining channel with zero delay...")
+        msg = await message.reply_text("⏳ Processing channel join sequentially...")
         
-        # ZERO DELAY PARALLEL JOIN FOR ALL ACCOUNTS AT ONCE
-        tasks = [join_target_chat(ubot, text) for session_str, ubot in USERBOT_SESSIONS.items()]
-        await asyncio.gather(*tasks)
+        joined = 0
+        failed = 0
+        for session_str, ubot in USERBOT_SESSIONS.items():
+            try:
+                ok, _, _ = await join_target_chat(ubot, text)
+                if ok:
+                    joined += 1
+                else:
+                    failed += 1
+                await asyncio.sleep(0.4)
+            except Exception:
+                failed += 1
 
-        await msg.edit_text("✅ **Channel Join Complete!** All accounts joined successfully without limits.")
+        await msg.edit_text(f"✅ **Channel Join Result**\n\n• Successfully Joined: {joined}\n• Failed/Errors: {failed}")
 
     elif state == "WAITING_FOR_VC_LINK":
         global ACTIVE_VC_COUNT, CURRENT_VC_CHAT
         USER_STATES.pop(user_id, None)
-        msg = await message.reply_text("⚡ Instant connecting VC with zero delay...")
+        msg = await message.reply_text("⏳ Connecting Voice Chat accounts...")
 
-        CURRENT_VC_CHAT = text  # Enable keep-alive tracking for 24/7 active status
+        CURRENT_VC_CHAT = text  
+        connected = 0
+        failed = 0
+        
+        for session_str, ubot in USERBOT_SESSIONS.items():
+            try:
+                ok, _ = await join_vc_session(ubot, text)
+                if ok:
+                    connected += 1
+                else:
+                    failed += 1
+                await asyncio.sleep(0.4)
+            except Exception:
+                failed += 1
 
-        # ZERO DELAY PARALLEL VC JOIN FOR ALL ACCOUNTS AT ONCE
-        tasks = [join_vc_session(ubot, text) for session_str, ubot in USERBOT_SESSIONS.items()]
-        await asyncio.gather(*tasks)
-
-        ACTIVE_VC_COUNT = len(USERBOT_SESSIONS)
-        await msg.edit_text("🎙 **VC Join Status:** All accounts connected instantly with zero delay!")
+        ACTIVE_VC_COUNT = connected
+        await msg.edit_text(f"🎙 **VC Join Result**\n\n• Connected: {connected}\n• Failed: {failed}")
 
     elif state == "WAITING_FOR_POST_LINK":
         USER_STATES.pop(user_id, None)
