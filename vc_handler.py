@@ -9,126 +9,134 @@ from pyrogram.errors import RPCError
 
 from vc_utils import resolve_chat_entity
 
-active_vc_clients = []
-active_ping_tasks = []
+# 24/7 Memory Reference (Saves clients from background deletion)
+ACTIVE_VC_SESSIONS = {}
 
-async def vc_keep_alive(acc: Client, input_call: InputGroupCall):
-    """हर 10 सेकंड में टेलीग्राम को सिग्नल भेजेगा ताकि अकाउंट VC से Auto-Leave न हो"""
-    try:
-        while True:
-            await asyncio.sleep(10)
+async def vc_maintainer_loop(acc, chat_input, input_call):
+    """
+    24/7 Maintainer Loop:
+    Har 15 sec me connection check karega. Agar account disconnect hota hai ya kick hota hai,
+    to jab tak VC ON hai, ye wapas AUTO-REJOIN kara dega.
+    """
+    while True:
+        try:
+            await asyncio.sleep(15)
+            
+            # 1. Connection alive check
+            if not acc.is_connected:
+                await acc.connect()
+
+            # 2. VC Active Ping
+            await acc.invoke(GetGroupCall(call=input_call, limit=1))
+
+        except asyncio.CancelledError:
+            break
+        except Exception as e:
+            # Agar disconnection hua, to auto-rejoin try karega
+            print(f"VC connection re-establishing... ({e})")
             try:
-                await acc.invoke(GetGroupCall(call=input_call, limit=1))
-            except RPCError:
-                break
+                chat = await resolve_chat_entity(acc, chat_input)
+                if chat:
+                    peer = await acc.resolve_peer(chat.id)
+                    full_chat = await acc.invoke(GetFullChannel(channel=peer))
+                    call_info = getattr(full_chat.full_chat, "call", None)
+                    
+                    if call_info:
+                        new_call = InputGroupCall(id=call_info.id, access_hash=call_info.access_hash)
+                        self_peer = await acc.resolve_peer("me")
+                        webrtc_params = DataJSON(data=json.dumps({
+                            "ssrc": random.randint(1000000, 9999999),
+                            "muted": True,
+                            "video_stopped": True,
+                            "screencast_stopped": True
+                        }))
+                        await acc.invoke(JoinGroupCall(call=new_call, join_as=self_peer, params=webrtc_params, muted=True))
+                        input_call = new_call
             except Exception:
                 pass
-    except asyncio.CancelledError:
-        pass
+
 
 async def join_vc(chat_input, sessions, api_id, api_hash):
-    global active_vc_clients, active_ping_tasks
+    global ACTIVE_VC_SESSIONS
     success = 0
     failed = 0
     
+    # Purane active session clean karein
+    await leave_all_vcs()
+
     for idx, session in enumerate(sessions):
         acc = None
         try:
             acc = Client(f"vc_acc_{idx}", api_id=api_id, api_hash=api_hash, session_string=session, in_memory=True)
             await acc.connect()
             
-            # 1. Chat Entity Resolve
+            # Chat resolve
             chat = await resolve_chat_entity(acc, chat_input)
             if not chat:
-                print(f"ID {idx}: Chat resolve nahi ho payi")
                 await acc.disconnect()
                 failed += 1
                 continue
 
-            # 2. Resolve Peer
             peer = await acc.resolve_peer(chat.id)
-            
-            # 3. Fetch Full Channel Info
             full_chat = await acc.invoke(GetFullChannel(channel=peer))
             call_info = getattr(full_chat.full_chat, "call", None)
-            
-            # 4. Check Linked Group if Channel
+
+            # Linked Group support for Channels
             if not call_info and getattr(full_chat.full_chat, "linked_chat_id", None):
                 linked_peer = await acc.resolve_peer(full_chat.full_chat.linked_chat_id)
                 full_chat = await acc.invoke(GetFullChannel(channel=linked_peer))
                 call_info = getattr(full_chat.full_chat, "call", None)
-                peer = linked_peer
 
             if not call_info:
-                print(f"ID {idx}: Voice Chat / Live Stream Active Nahi Hai!")
                 await acc.disconnect()
                 failed += 1
                 continue
 
-            # 5. Construct InputGroupCall Object
-            input_call = InputGroupCall(
-                id=call_info.id,
-                access_hash=call_info.access_hash
-            )
-
-            # 6. Generate Unique Random SSRC
-            random_ssrc = random.randint(100000, 9999999)
+            input_call = InputGroupCall(id=call_info.id, access_hash=call_info.access_hash)
             self_peer = await acc.resolve_peer("me")
+            random_ssrc = random.randint(1000000, 9999999)
             
-            webrtc_params = DataJSON(
-                data=json.dumps({
-                    "ssrc": random_ssrc,
-                    "muted": True,
-                    "video_stopped": True,
-                    "screencast_stopped": True
-                })
-            )
+            webrtc_params = DataJSON(data=json.dumps({
+                "ssrc": random_ssrc,
+                "muted": True,
+                "video_stopped": True,
+                "screencast_stopped": True
+            }))
 
-            # 7. Join Group Call / Live Stream
-            await acc.invoke(
-                JoinGroupCall(
-                    call=input_call,
-                    join_as=self_peer,
-                    params=webrtc_params,
-                    muted=True
-                )
-            )
+            # Initial Join
+            await acc.invoke(JoinGroupCall(call=input_call, join_as=self_peer, params=webrtc_params, muted=True))
 
-            active_vc_clients.append(acc)
-
-            # 8. Keep-Alive Task चालू करें
-            task = asyncio.create_task(vc_keep_alive(acc, input_call))
-            active_ping_tasks.append(task)
+            # Start 24/7 Auto-Rejoin Loop
+            task = asyncio.create_task(vc_maintainer_loop(acc, chat_input, input_call))
+            
+            # Save session in permanent memory dictionary
+            ACTIVE_VC_SESSIONS[idx] = {
+                "client": acc,
+                "task": task
+            }
 
             success += 1
-            await asyncio.sleep(1.5)
+            await asyncio.sleep(1)
 
         except Exception as e:
-            print(f"VC Join Error (ID {idx}): {e}")
+            print(f"Join Error (ID {idx}): {e}")
             if acc:
-                try:
-                    await acc.disconnect()
-                except Exception:
-                    pass
+                try: await acc.disconnect()
+                except: pass
             failed += 1
 
     return success, failed
 
+
 async def leave_all_vcs():
-    global active_vc_clients, active_ping_tasks
+    global ACTIVE_VC_SESSIONS
     count = 0
-
-    # Ping Tasks बंद करें
-    for task in active_ping_tasks:
-        task.cancel()
-    active_ping_tasks.clear()
-
-    # Accounts Disconnect करें
-    for acc in active_vc_clients:
+    for idx, data in list(ACTIVE_VC_SESSIONS.items()):
         try:
-            await acc.disconnect()
+            data["task"].cancel()
+            await data["client"].disconnect()
             count += 1
         except Exception:
             pass
-    active_vc_clients.clear()
+    ACTIVE_VC_SESSIONS.clear()
     return count
