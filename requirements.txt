@@ -1,4 +1,6 @@
-pyrogram==2.0.106
-tgcrypto==1.2.5
-pymongo==4.7.2
-dnspython==2.6.1
+pyrogram
+tgcrypto
+flask
+pymongo
+motor
+python-dotenv
