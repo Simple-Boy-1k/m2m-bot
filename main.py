@@ -5,17 +5,17 @@ from pymongo import MongoClient
 from pyrogram import Client, filters
 from pyrogram.enums import ParseMode
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery, Message
-from pyrogram.errors import (
-    UserAlreadyParticipant, 
-    RPCError
-)
+from pyrogram.errors import UserAlreadyParticipant, RPCError
+
+# VC Handler से फंक्शंस इम्पोर्ट किए जा रहे हैं
+from vc_handler import join_vc, leave_all_vcs
 
 # ==================== CONFIGURATION ====================
 API_ID = 31551910
 API_HASH = "c2e8e7946d5e4ea947d44b674008f33e"
 BOT_TOKEN = "8595762999:AAHNgNIHeWZLvcp5zr_6zJ3TTxe7u3aXpa8"
 
-# Heroku Environment Variable से MongoDB URI उठाएगा
+# MongoDB Connection String
 MONGO_URI = os.getenv("MONGO_URI", "mongodb+srv://sksahnawaj89_db_user:4TjZxb4Xfz0O0TNr@cluster0.5raayqr.mongodb.net/?appName=Cluster0")
 
 # ==================== MONGODB DATABASE SETUP ====================
@@ -64,7 +64,7 @@ def get_main_keyboard():
         ],
         [
             InlineKeyboardButton("🎙️ VC JOINER", callback_data="vc_joiner"),
-            InlineKeyboardButton("🔴 VC LEAVE (OFF)", callback_data="vc_leave"),
+            InlineKeyboardButton("🔴 VC LEAVE", callback_data="vc_leave"),
         ],
         [
             InlineKeyboardButton("🚪 LEAVE ALL CHANNEL", callback_data="leave_all"),
@@ -125,11 +125,17 @@ async def callback_handler(client, query: CallbackQuery):
         await query.message.reply_text("🔗 **जिस चैनल/ग्रुप में जोड़ना है उसका Username या Invite Link भेजें:**")
 
     elif data == "vc_joiner":
-        await query.answer("तमाम IDs VC (Voice Chat) में जुड़ रही हैं...", show_alert=True)
+        if not user_sessions:
+            await query.answer("❌ कोई भी एकाउंट्स ऐड नहीं हैं!", show_alert=True)
+            return
+        user_states[user_id] = "WAITING_FOR_VC_LINK"
+        await query.answer()
+        await query.message.reply_text("🎙️ **जिस ग्रुप की Voice Chat (VC) में जोड़ना है उसका Link/Username भेजें:**")
 
     elif data == "vc_leave":
+        count = await leave_all_vcs()
         active_vc_count = 0
-        await query.answer("सभी IDs VC छोड़ चुकी हैं!", show_alert=True)
+        await query.answer(f"✅ {count} IDs VC से बाहर निकल चुकी हैं!", show_alert=True)
         await query.message.edit_text(text=get_status_text(), reply_markup=get_main_keyboard(), parse_mode=ParseMode.HTML)
 
     elif data == "leave_all":
@@ -173,6 +179,7 @@ async def callback_handler(client, query: CallbackQuery):
 # ==================== INPUT MESSAGE HANDLER ====================
 @bot.on_message(filters.private & ~filters.command(["start"]))
 async def message_input_handler(_, message: Message):
+    global active_vc_count
     user_id = message.from_user.id
     state = user_states.get(user_id)
     if not state:
@@ -180,6 +187,7 @@ async def message_input_handler(_, message: Message):
 
     user_sessions = load_sessions()
 
+    # 1. ADD ACCOUNT
     if state == "WAITING_FOR_SESSION":
         session_str = message.text.strip()
         try:
@@ -199,6 +207,7 @@ async def message_input_handler(_, message: Message):
 
         user_states[user_id] = None
 
+    # 2. JOIN CHANNEL
     elif state == "WAITING_FOR_CHANNEL":
         chat_id = message.text.strip()
         await message.reply_text("⏳ **सभी एकाउंट्स को ज्वाइन कराया जा रहा है...**")
@@ -218,7 +227,18 @@ async def message_input_handler(_, message: Message):
             except Exception:
                 failed += 1
 
-        await message.reply_text(f"🚀 **Join Operation Completed!**\n❌ **Failed:** {success}\n✅ **Success:** {failed}")
+        await message.reply_text(f"🚀 **Join Operation Completed!**\n✅ **Success:** {success}\n❌ **Failed:** {failed}")
+        user_states[user_id] = None
+
+    # 3. VC JOINER
+    elif state == "WAITING_FOR_VC_LINK":
+        chat_id = message.text.strip()
+        await message.reply_text("🎙️ **सभी एकाउंट्स VC में जुड़ रहे हैं, कृपया प्रतीक्षा करें...**")
+        
+        success, failed = await join_vc(chat_id, user_sessions, API_ID, API_HASH)
+        active_vc_count += success
+        
+        await message.reply_text(f"✅ **VC Join Completed!**\n👍 **Success:** {success}\n👎 **Failed:** {failed}")
         user_states[user_id] = None
 
 # ==================== RUN BOT ====================
