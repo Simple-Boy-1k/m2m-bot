@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <img src="https://ibb.co/s9qbhD1t" width="550" alt="SARKAR MOD BANNER">
+  <img src="https://i.postimg.cc/zftT37RD/file-0000000061fc81fab8f656d35475bd44.png" width="550" alt="SARKAR MOD BANNER">
 </p>
 
 <p align="center">
