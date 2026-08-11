@@ -6,7 +6,8 @@ import config
 from keep_alive import keep_alive
 from vc_handler import (
     join_vc, leave_all_vcs, get_active_count, 
-    join_channel_all, leave_all_channels_all, purge_dead_sessions, react_and_views_post
+    join_channel_all, leave_all_channels_all, purge_dead_sessions, 
+    recycle_accounts_all, react_and_views_post
 )
 from database import (
     add_session, delete_all_sessions, get_sessions_count, 
@@ -22,7 +23,6 @@ app = Client(
     bot_token=config.BOT_TOKEN
 )
 
-# 🎯 SCREENSHOT EXACT BUTTON LAYOUT
 MAIN_KEYBOARD = InlineKeyboardMarkup([
     [
         InlineKeyboardButton("➕ ADD ACCOUNT", callback_data="btn_add_account"),
@@ -41,7 +41,10 @@ MAIN_KEYBOARD = InlineKeyboardMarkup([
         InlineKeyboardButton("👁 VIEWS TOGGLE", callback_data="btn_views_toggle")
     ],
     [
-        InlineKeyboardButton("🔐 ADMIN PANEL", callback_data="btn_admin_panel"),
+        InlineKeyboardButton("♻️ RECYCLE ACCOUNTS", callback_data="btn_recycle_accounts"),
+        InlineKeyboardButton("🔐 ADMIN PANEL", callback_data="btn_admin_panel")
+    ],
+    [
         InlineKeyboardButton("🔄 REFRESH", callback_data="btn_refresh")
     ]
 ])
@@ -134,6 +137,18 @@ async def callback_handler(client: Client, query: CallbackQuery):
         text = await render_panel_text()
         await msg.edit_text(f"🔔 **{removed} खराब सेशंस MongoDB से हटा दिए गए।**\n\n" + text, reply_markup=MAIN_KEYBOARD)
 
+    elif data == "btn_recycle_accounts":
+        await query.answer("Recycling Accounts...", show_alert=False)
+        msg = await query.message.edit_text("⏳ **सभी एकाउंट्स रीसाइक्लिंग और री-वेरीफाई किए जा रहे हैं...**")
+        recycled, dead = await recycle_accounts_all(config.API_ID, config.API_HASH)
+        text = await render_panel_text()
+        await msg.edit_text(
+            f"♻️ **Recycle Completed!**\n"
+            f"✅ Valid & Active: `{recycled}` IDs\n"
+            f"❌ Removed Dead: `{dead}` IDs\n\n" + text,
+            reply_markup=MAIN_KEYBOARD
+        )
+
     elif data == "btn_react_views":
         USER_STATES[user_id] = "WAITING_FOR_REACT"
         await query.message.edit_text(
@@ -150,12 +165,16 @@ async def callback_handler(client: Client, query: CallbackQuery):
         await query.message.edit_text(text, reply_markup=MAIN_KEYBOARD)
 
     elif data == "btn_admin_panel":
+        acc_count = await get_sessions_count()
+        active_vc = get_active_count()
         admin_text = (
-            "🔐 **ADMIN PANEL**\n\n"
+            "🔐 **ADMIN CONTROL PANEL**\n\n"
             f"👑 **Owner ID:** `{config.OWNER_ID}`\n"
-            f"🌐 **Server:** Heroku Worker Active\n"
-            f"🗄 **DB:** MongoDB Connected\n\n"
-            "सभी कंट्रोल्स मेन पैनल पर एक्टिव हैं।"
+            f"👥 **Total Accounts:** `{acc_count}`\n"
+            f"🎙 **Active in VC:** `{active_vc}`\n"
+            f"🌐 **Server:** Heroku Active 24/7\n"
+            f"🗄 **Database:** MongoDB Connected\n\n"
+            "सभी फीचर्स और बटन्स पूरी तरह सक्रिय हैं।"
         )
         await query.message.edit_text(admin_text, reply_markup=MAIN_KEYBOARD)
 
