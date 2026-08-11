@@ -6,7 +6,7 @@ from pyrogram.raw.functions.phone import JoinGroupCall, GetGroupCall
 from pyrogram.raw.functions.channels import GetFullChannel
 from pyrogram.raw.types import DataJSON, InputGroupCall
 from vc_utils import resolve_chat_entity
-from database import get_all_sessions
+from database import get_all_sessions, delete_session
 
 ACTIVE_SESSIONS = {}
 
@@ -111,3 +111,64 @@ async def leave_all_vcs():
 
 def get_active_count():
     return len(ACTIVE_SESSIONS)
+
+# 🚀 JOIN CHANNEL
+async def join_channel_all(chat_input, api_id, api_hash):
+    sessions = await get_all_sessions()
+    success, failed = 0, 0
+    for idx, session in enumerate(sessions):
+        try:
+            async with Client(f"ch_join_{idx}", api_id=api_id, api_hash=api_hash, session_string=session, in_memory=True) as acc:
+                await resolve_chat_entity(acc, chat_input)
+                success += 1
+        except Exception:
+            failed += 1
+    return success, failed
+
+# 🚪 LEAVE ALL CHANNELS
+async def leave_all_channels_all(api_id, api_hash):
+    sessions = await get_all_sessions()
+    success = 0
+    for idx, session in enumerate(sessions):
+        try:
+            async with Client(f"ch_leave_{idx}", api_id=api_id, api_hash=api_hash, session_string=session, in_memory=True) as acc:
+                async for dialog in acc.get_dialogs():
+                    if dialog.chat.type in ["channel", "group", "supergroup"]:
+                        try:
+                            await acc.leave_chat(dialog.chat.id)
+                        except Exception:
+                            pass
+                success += 1
+        except Exception:
+            pass
+    return success
+
+# 🔔 PURGE DEAD
+async def purge_dead_sessions(api_id, api_hash):
+    sessions = await get_all_sessions()
+    removed = 0
+    for session in sessions:
+        try:
+            async with Client("purge_chk", api_id=api_id, api_hash=api_hash, session_string=session, in_memory=True) as acc:
+                await acc.get_me()
+        except Exception:
+            await delete_session(session)
+            removed += 1
+    return removed
+
+# ❤️ REACT + VIEWS
+async def react_and_views_post(post_link, emoji, api_id, api_hash):
+    sessions = await get_all_sessions()
+    success = 0
+    for idx, session in enumerate(sessions):
+        try:
+            async with Client(f"react_{idx}", api_id=api_id, api_hash=api_hash, session_string=session, in_memory=True) as acc:
+                parts = post_link.replace("https://t.me/", "").split("/")
+                chat_username = parts[0]
+                message_id = int(parts[1])
+                await acc.send_reaction(chat_username, message_id, emoji)
+                await acc.get_messages(chat_username, message_id)
+                success += 1
+        except Exception:
+            pass
+    return success
