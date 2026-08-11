@@ -58,4 +58,4 @@
 
 ### ✍️ Credits & Support
 
-* **Developer & Owner**: [𝙎𝘼𝙍𝙆𝘼𝙍](https://t.me/8237346239)
+* **Developer & Owner**: [𝙎𝘼𝙍𝙆𝘼𝙍](https://t.me/Simple_Boy_1k)
