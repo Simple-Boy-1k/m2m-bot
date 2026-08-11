@@ -3,7 +3,7 @@ import logging
 import asyncio
 import random
 import motor.motor_asyncio
-from pyrogram import Client, filters
+from pyrogram import Client, filters, enums
 from pyrogram.enums import ChatType
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery, WebAppInfo
 from pyrogram.errors import (
@@ -32,6 +32,12 @@ MONGO_URL = os.environ.get("MONGO_URL")
 
 # Dynamic Button Colour Config (Music Bot style toggle compatibility)
 BUTTON_COLOUR = os.environ.get("BUTTON_COLOUR", "True").lower() in ("true", "1", "t")
+
+STYLES = [
+    enums.ButtonStyle.PRIMARY,
+    enums.ButtonStyle.SUCCESS,
+    enums.ButtonStyle.DANGER
+]
 
 missing_vars = []
 if not API_ID_RAW: missing_vars.append("API_ID")
@@ -247,31 +253,35 @@ def get_panel_text():
     )
 
 def get_main_keyboard():
-    # If BUTTON_COLOUR is enabled, we map optimized layout hooks
+    def get_style():
+        if BUTTON_COLOUR:
+            return {"style": random.choice(STYLES)}
+        return {}
+
     if BUTTON_COLOUR:
         return InlineKeyboardMarkup([
             [
-                InlineKeyboardButton("➕ ADD ACCOUNT", callback_data="add_account"),
-                InlineKeyboardButton("🚀 JOIN CHANNEL", callback_data="join_channel")
+                InlineKeyboardButton("➕ ADD ACCOUNT", callback_data="add_account", **get_style()),
+                InlineKeyboardButton("🚀 JOIN CHANNEL", callback_data="join_channel", **get_style())
             ],
             [
-                InlineKeyboardButton("🎙 VC JOINER", callback_data="vc_joiner"),
-                InlineKeyboardButton("🔴 VC LEAVE", callback_data="vc_leave")
+                InlineKeyboardButton("🎙 VC JOINER", callback_data="vc_joiner", **get_style()),
+                InlineKeyboardButton("🔴 VC LEAVE", callback_data="vc_leave", **get_style())
             ],
             [
-                InlineKeyboardButton("🚪 LEAVE ALL CHANNEL", callback_data="leave_all_channel"),
-                InlineKeyboardButton("🔔 PURGE DEAD", callback_data="purge_dead")
+                InlineKeyboardButton("🚪 LEAVE ALL CHANNEL", callback_data="leave_all_channel", **get_style()),
+                InlineKeyboardButton("🔔 PURGE DEAD", callback_data="purge_dead", **get_style())
             ],
             [
-                InlineKeyboardButton("❤️ REACT + VIEWS", callback_data="react_views"),
-                InlineKeyboardButton("👁 VIEWS TOGGLE", callback_data="views_toggle")
+                InlineKeyboardButton("❤️ REACT + VIEWS", callback_data="react_views", **get_style()),
+                InlineKeyboardButton("👁 VIEWS TOGGLE", callback_data="views_toggle", **get_style())
             ],
             [
-                InlineKeyboardButton("♻️ RECYCLE ACCOUNTS", callback_data="recycle_accounts"),
-                InlineKeyboardButton("🔐 ADMIN PANEL", callback_data="admin_panel")
+                InlineKeyboardButton("♻️ RECYCLE ACCOUNTS", callback_data="recycle_accounts", **get_style()),
+                InlineKeyboardButton("🔐 ADMIN PANEL", callback_data="admin_panel", **get_style())
             ],
             [
-                InlineKeyboardButton("🔄 REFRESH", callback_data="refresh")
+                InlineKeyboardButton("🔄 REFRESH", callback_data="refresh", **get_style())
             ]
         ])
     else:
