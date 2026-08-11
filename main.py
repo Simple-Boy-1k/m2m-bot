@@ -1,6 +1,7 @@
 import os
 import logging
 import asyncio
+import motor.motor_asyncio
 from pyrogram import Client, filters
 from pyrogram.enums import ChatType
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
@@ -17,28 +18,74 @@ from pyrogram.raw import functions, types
 # Logging setup
 logging.basicConfig(level=logging.INFO)
 
-# ==================== CONFIGURATION ====================
-API_ID = int(os.environ.get("API_ID", "123456"))          # Apna API ID dalein
-API_HASH = os.environ.get("API_HASH", "YOUR_API_HASH")    # Apna API HASH dalein
-BOT_TOKEN = os.environ.get("BOT_TOKEN", "YOUR_BOT_TOKEN")  # Bot Token dalein
-OWNER_ID = int(os.environ.get("OWNER_ID", "123456789"))   # Apna Telegram User ID dalein
-# =======================================================
+# ==================== CONFIGURATION (FROM ENVIRONMENT VARS ONLY) ====================
+try:
+    API_ID = int(os.environ.get("API_ID", "0"))
+    API_HASH = os.environ.get("API_HASH")
+    BOT_TOKEN = os.environ.get("BOT_TOKEN")
+    OWNER_ID = int(os.environ.get("OWNER_ID", "0"))
+    MONGO_URL = os.environ.get("MONGO_URL")
+except ValueError:
+    raise ValueError("API_ID aur OWNER_ID valid numbers hone chahiye!")
 
+# Safety Check: Heroku Config Vars Validation
+if not API_ID or not API_HASH or not BOT_TOKEN or not OWNER_ID or not MONGO_URL:
+    raise ValueError(
+        "CRITICAL ERROR: Secrets missing hain!\n"
+        "Heroku Settings -> Config Vars me jaakar API_ID, API_HASH, BOT_TOKEN, OWNER_ID aur MONGO_URL set karein."
+    )
+# ====================================================================================
+
+# MongoDB Connection Setup
+mongo_client = motor.motor_asyncio.AsyncIOMotorClient(MONGO_URL)
+db = mongo_client["p2p_m2m_bot_db"]
+sessions_col = db["userbot_sessions"]
+admins_col = db["bot_admins"]
+
+# Global Memory Storage
 ADMIN_IDS = {OWNER_ID}
 USERBOT_SESSIONS = {}   # session_string -> Client instance
 ACTIVE_VC_COUNT = 0
 AUTO_VIEWS_ENABLED = True
-USER_STATES = {}        # Track input state
+USER_STATES = {}
 
 app = Client("account_manager_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
+
+
+# -------------------- DATABASE LOADER --------------------
+
+async def load_data_from_db():
+    """Bot start hone par MongoDB se saare accounts aur admins auto-load honge"""
+    global ADMIN_IDS, USERBOT_SESSIONS
+    logging.info("MongoDB Database se data load ho raha hai...")
+
+    # Load Admins from Mongo
+    async for admin_doc in admins_col.find():
+        ADMIN_IDS.add(int(admin_doc["user_id"]))
+
+    # Load Userbot Sessions from Mongo
+    loaded_count = 0
+    async for session_doc in sessions_col.find():
+        session_str = session_doc["session"]
+        try:
+            ubot = Client("ubot_mem", api_id=API_ID, api_hash=API_HASH, session_string=session_str, in_memory=True)
+            await ubot.start()
+            USERBOT_SESSIONS[session_str] = ubot
+            loaded_count += 1
+        except Exception as e:
+            logging.error(f"Saved session invalid: {e}")
+            # Invalid session ko database se auto-delete karega
+            await sessions_col.delete_one({"session": session_str})
+
+    logging.info(f"Database sync complete! Total {loaded_count} accounts aur {len(ADMIN_IDS)} admins restored.")
+
 
 # -------------------- HELPER FUNCTIONS --------------------
 
 async def join_target_chat(ubot, chat_link: str):
-    """Handles all link formats: @username, https://t.me/username, https://t.me/+privatehash"""
     chat_link = chat_link.strip()
     
-    # Private Invite Link
+    # Private Link
     if "t.me/+" in chat_link or "joinchat/" in chat_link:
         if "t.me/+" in chat_link:
             invite_hash = chat_link.split("t.me/+")[-1].split("/")[0].split("?")[0]
@@ -53,7 +100,7 @@ async def join_target_chat(ubot, chat_link: str):
         except Exception as e:
             return False, None, str(e)
 
-    # Public Link / Username
+    # Public Link
     else:
         username = chat_link.replace("https://t.me/", "").replace("http://t.me/", "").replace("@", "").split("/")[0].split("?")[0]
         try:
@@ -67,7 +114,6 @@ async def join_target_chat(ubot, chat_link: str):
 
 
 async def join_vc_session(ubot, chat_link: str):
-    """Joins Voice Chat using Raw Telegram API Protocol"""
     success, chat, msg = await join_target_chat(ubot, chat_link)
     if not success and "Already Joined" not in msg:
         return False, f"Chat Join Error: {msg}"
@@ -101,7 +147,6 @@ async def join_vc_session(ubot, chat_link: str):
 
 
 async def leave_all_channels_robust(ubot):
-    """Robust Mass Channel/Group Leave with FloodWait protection"""
     left_count = 0
     skipped_count = 0
 
@@ -111,9 +156,8 @@ async def leave_all_channels_robust(ubot):
                 try:
                     await ubot.leave_chat(dialog.chat.id)
                     left_count += 1
-                    await asyncio.sleep(0.8)  # Safe delay to prevent limits
+                    await asyncio.sleep(0.8)
                 except UserCreator:
-                    # Own banaye hue channels/groups leave nahi ho sakte
                     skipped_count += 1
                     continue
                 except FloodWait as e:
@@ -130,6 +174,7 @@ async def leave_all_channels_robust(ubot):
 
     return left_count, skipped_count
 
+
 # -------------------- CONTROL PANEL LAYOUTS --------------------
 
 def get_panel_text():
@@ -138,7 +183,7 @@ def get_panel_text():
         "<b>P2P M2M CONTROL PANEL</b>\n\n"
         f"👥 <b>ACCOUNT</b> : {len(USERBOT_SESSIONS)} IDs\n"
         f"🗣 <b>ACTIVE VC</b> : {ACTIVE_VC_COUNT} IDs\n"
-        "🟢 <b>STATUS</b>: ONLINE 24/7 (System Ready)\n"
+        "🟢 <b>STATUS</b>: ONLINE 24/7 (MongoDB Secured)\n"
         f"👁 <b>AUTO-VIEWS</b>: {views_status}"
     )
 
@@ -180,6 +225,7 @@ def get_admin_menu_keyboard():
 def get_back_button():
     return InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back to Main Menu", callback_data="back_to_main")]])
 
+
 # -------------------- COMMAND HANDLERS --------------------
 
 @app.on_message(filters.command("start") & filters.private)
@@ -194,6 +240,7 @@ async def start_handler(client, message):
         reply_markup=get_main_keyboard()
     )
 
+
 # -------------------- CALLBACK QUERY HANDLER --------------------
 
 @app.on_callback_query()
@@ -207,7 +254,6 @@ async def callback_handler(client, callback_query: CallbackQuery):
 
     data = callback_query.data
 
-    # 1. ADD ACCOUNT
     if data == "add_account":
         USER_STATES[user_id] = "WAITING_FOR_SESSION"
         await callback_query.answer()
@@ -216,7 +262,6 @@ async def callback_handler(client, callback_query: CallbackQuery):
             reply_markup=get_back_button()
         )
 
-    # 2. JOIN CHANNEL
     elif data == "join_channel":
         if not USERBOT_SESSIONS:
             await callback_query.answer("Pehle kam se kam ek account add karein!", show_alert=True)
@@ -228,7 +273,6 @@ async def callback_handler(client, callback_query: CallbackQuery):
             reply_markup=get_back_button()
         )
 
-    # 3. VC JOINER
     elif data == "vc_joiner":
         if not USERBOT_SESSIONS:
             await callback_query.answer("Koi active account nahi hai!", show_alert=True)
@@ -240,13 +284,11 @@ async def callback_handler(client, callback_query: CallbackQuery):
             reply_markup=get_back_button()
         )
 
-    # 4. VC LEAVE
     elif data == "vc_leave":
         ACTIVE_VC_COUNT = 0
         await callback_query.answer("VC status reseted!", show_alert=True)
         await callback_query.edit_message_text(text=get_panel_text(), reply_markup=get_main_keyboard())
 
-    # 5. LEAVE ALL CHANNEL (FULLY FIXED & ROBUST)
     elif data == "leave_all_channel":
         if not USERBOT_SESSIONS:
             await callback_query.answer("Koi active account nahi hai!", show_alert=True)
@@ -255,9 +297,7 @@ async def callback_handler(client, callback_query: CallbackQuery):
         await callback_query.answer("Mass channel cleanup start ho raha hai...", show_alert=True)
         await callback_query.edit_message_text("⏳ **Cleaning Process Active:** Sabhi accounts se channels/groups leave kiye ja rahe hain...")
 
-        total_left = 0
-        total_skipped = 0
-
+        total_left, total_skipped = 0, 0
         for session_str, ubot in list(USERBOT_SESSIONS.items()):
             left, skipped = await leave_all_channels_robust(ubot)
             total_left += left
@@ -272,7 +312,6 @@ async def callback_handler(client, callback_query: CallbackQuery):
             reply_markup=get_back_button()
         )
 
-    # 6. PURGE DEAD
     elif data == "purge_dead":
         await callback_query.answer("Testing accounts...", show_alert=True)
         dead_count = 0
@@ -281,14 +320,14 @@ async def callback_handler(client, callback_query: CallbackQuery):
                 await ubot.get_me()
             except (UserDeactivated, SessionRevoked, AuthKeyUnregistered, Exception):
                 del USERBOT_SESSIONS[session_str]
+                await sessions_col.delete_one({"session": session_str})
                 dead_count += 1
         
         await callback_query.edit_message_text(
-            text=f"<b>🔔 Purge Complete</b>\n\n{dead_count} dead/invalid accounts remove kar diye gaye hain.",
+            text=f"<b>🔔 Purge Complete</b>\n\n{dead_count} dead accounts MongoDB aur Bot se remove kar diye gaye.",
             reply_markup=get_back_button()
         )
 
-    # 7. REACT + VIEWS
     elif data == "react_views":
         if not USERBOT_SESSIONS:
             await callback_query.answer("Pehle account add karein!", show_alert=True)
@@ -300,14 +339,12 @@ async def callback_handler(client, callback_query: CallbackQuery):
             reply_markup=get_back_button()
         )
 
-    # 8. VIEWS TOGGLE
     elif data == "views_toggle":
         AUTO_VIEWS_ENABLED = not AUTO_VIEWS_ENABLED
         status_msg = "ENABLED ✅" if AUTO_VIEWS_ENABLED else "DISABLED ❌"
         await callback_query.answer(f"Auto-Views: {status_msg}", show_alert=True)
         await callback_query.edit_message_text(text=get_panel_text(), reply_markup=get_main_keyboard())
 
-    # 9. RECYCLE ACCOUNTS
     elif data == "recycle_accounts":
         await callback_query.answer("Recycling all accounts...", show_alert=True)
         recycled = 0
@@ -323,12 +360,10 @@ async def callback_handler(client, callback_query: CallbackQuery):
             reply_markup=get_back_button()
         )
 
-    # 10. REFRESH
     elif data == "refresh":
         await callback_query.answer("Refreshed! 🔄")
         await callback_query.edit_message_text(text=get_panel_text(), reply_markup=get_main_keyboard())
 
-    # 11. ADMIN PANEL (OWNER ONLY)
     elif data == "admin_panel":
         if user_id != OWNER_ID:
             await callback_query.answer("⛔ Only Main Owner can manage Admin Panel!", show_alert=True)
@@ -374,7 +409,8 @@ async def callback_handler(client, callback_query: CallbackQuery):
         target_id = int(data.split("_")[2])
         if target_id in ADMIN_IDS:
             ADMIN_IDS.remove(target_id)
-            await callback_query.answer("Admin removed!", show_alert=True)
+            await admins_col.delete_one({"user_id": target_id})
+            await callback_query.answer("Admin removed from MongoDB!", show_alert=True)
         await callback_query.edit_message_text(
             text="<b>🔐 ADMIN PANEL MANAGEMENT</b>\n\nAdmin remove ho gaya.",
             reply_markup=get_admin_menu_keyboard()
@@ -395,6 +431,7 @@ async def callback_handler(client, callback_query: CallbackQuery):
         USER_STATES.pop(user_id, None)
         await callback_query.edit_message_text(text=get_panel_text(), reply_markup=get_main_keyboard())
 
+
 # -------------------- INPUT PROCESSING HANDLER --------------------
 
 @app.on_message(filters.private & ~filters.command(["start"]))
@@ -407,16 +444,19 @@ async def message_input_handler(client, message):
 
     text = message.text.strip()
 
-    # 1. ADD ACCOUNT INPUT
+    # 1. ADD ACCOUNT (SAVE TO MONGO DB)
     if state == "WAITING_FOR_SESSION":
         try:
             temp_client = Client("ubot_temp", api_id=API_ID, api_hash=API_HASH, session_string=text, in_memory=True)
             await temp_client.start()
             me = await temp_client.get_me()
             USERBOT_SESSIONS[text] = temp_client
+            
+            await sessions_col.update_one({"session": text}, {"$set": {"session": text, "user_id": me.id}}, upsert=True)
+            
             USER_STATES.pop(user_id, None)
             await message.reply_text(
-                f"✅ **Account Added Successfully!**\n\n• Name: {me.first_name}\n• ID: <code>{me.id}</code>",
+                f"✅ **Account Saved to MongoDB!**\n\n• Name: {me.first_name}\n• ID: <code>{me.id}</code>",
                 reply_markup=get_main_keyboard()
             )
         except Exception as e:
@@ -479,18 +519,29 @@ async def message_input_handler(client, message):
                     continue
             await message.reply_text(f"✅ Post par {success} Views + Reactions bhej diye gaye!")
         except Exception:
-            await message.reply_text("❌ Post Link Format galat hai! Example format: `https://t.me/channel_username/123`")
+            await message.reply_text("❌ Post Link Format galat hai!")
 
-    # 5. ADD ADMIN INPUT
+    # 5. ADD ADMIN (SAVE TO MONGO DB)
     elif state == "WAITING_FOR_ADMIN_ID":
         if user_id == OWNER_ID and text.isdigit():
             new_id = int(text)
             ADMIN_IDS.add(new_id)
+            await admins_col.update_one({"user_id": new_id}, {"$set": {"user_id": new_id}}, upsert=True)
+            
             USER_STATES.pop(user_id, None)
-            await message.reply_text(f"✅ User ID <code>{new_id}</code> Admin bana diya gaya.", reply_markup=get_admin_menu_keyboard())
+            await message.reply_text(f"✅ User ID <code>{new_id}</code> MongoDB me Admin save ho gaya.", reply_markup=get_admin_menu_keyboard())
         else:
             await message.reply_text("❌ Sahi numeric Telegram User ID bhejein.")
 
+
+# -------------------- BOT RUNNER WITH DB LOADER --------------------
+
+async def main():
+    await app.start()
+    await load_data_from_db()
+    print("Bot is fully active and MongoDB secured!")
+    await asyncio.Event().wait()
+
 if __name__ == "__main__":
-    print("Bot starting with fixed Channel Leave engine...")
-    app.run()
+    loop = asyncio.get_event_loop()
+    loop.run_until_complete(main())
