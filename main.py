@@ -434,7 +434,6 @@ async def callback_handler(client, callback_query: CallbackQuery):
         )
 
     elif data == "refresh":
-        # Synchronize active accounts and live VC connections
         alive_accounts = 0
         for session_str, ubot in list(USERBOT_SESSIONS.items()):
             if ubot.is_connected:
@@ -548,16 +547,15 @@ async def message_input_handler(client, message):
 
     elif state == "WAITING_FOR_JOIN_LINK":
         USER_STATES.pop(user_id, None)
-        msg = await message.reply_text("⏳ Processing accounts join...")
-        joined, failed, reasons = 0, 0, []
+        msg = await message.reply_text("⏳ Processing accounts instantly...")
+        
+        # INSTANT PARALLEL JOIN (No delays, no seconds wait)
+        tasks = [join_target_chat(ubot, text) for session_str, ubot in USERBOT_SESSIONS.items()]
+        results = await asyncio.gather(*tasks)
 
-        for session_str, ubot in USERBOT_SESSIONS.items():
-            ok, chat_obj, err_msg = await join_target_chat(ubot, text)
-            if ok:
-                joined += 1
-            else:
-                failed += 1
-                reasons.append(err_msg)
+        joined = sum(1 for ok, _, _ in results if ok)
+        failed = len(results) - joined
+        reasons = [err_msg for ok, _, err_msg in results if not ok]
 
         detail_text = f"✅ **Join Operation Complete**\n\n• Joined/Already in Chat: {joined}\n• Failed: {failed}"
         if reasons:
@@ -567,21 +565,20 @@ async def message_input_handler(client, message):
     elif state == "WAITING_FOR_VC_LINK":
         global ACTIVE_VC_COUNT, CURRENT_VC_CHAT
         USER_STATES.pop(user_id, None)
-        msg = await message.reply_text("⏳ Connecting Voice Chat 24/7...")
-        connected, failed, vc_errors = 0, 0, []
+        msg = await message.reply_text("⏳ Connecting Voice Chat instantly...")
 
         CURRENT_VC_CHAT = text  # Enable keep-alive tracking for 24/7 active status
 
-        for session_str, ubot in USERBOT_SESSIONS.items():
-            ok, err_msg = await join_vc_session(ubot, text)
-            if ok:
-                connected += 1
-            else:
-                failed += 1
-                vc_errors.append(err_msg)
+        # INSTANT PARALLEL VC JOIN (No delays, no seconds wait)
+        tasks = [join_vc_session(ubot, text) for session_str, ubot in USERBOT_SESSIONS.items()]
+        results = await asyncio.gather(*tasks)
+
+        connected = sum(1 for ok, _ in results if ok)
+        failed = len(results) - connected
+        vc_errors = [err_msg for ok, err_msg in results if not ok]
 
         ACTIVE_VC_COUNT = connected
-        resp_text = f"🎙 **VC Join Status (24/7 Mode Active)**\n\n• Connected: {connected}\n• Failed: {failed}"
+        resp_text = f"🎙 **VC Join Status (Instant Mode Active)**\n\n• Connected: {connected}\n• Failed: {failed}"
         if vc_errors:
             resp_text += f"\n\n⚠️ **Reason:** {vc_errors[0]}"
         await msg.edit_text(resp_text)
