@@ -1,4 +1,4 @@
-import os
+Import os
 import logging
 import asyncio
 import random
@@ -97,7 +97,7 @@ async def load_data_from_db():
     logging.info(f"Database sync complete! Total {loaded_count} accounts aur {len(ADMIN_IDS)} admins restored.")
 
 
-# -------------------- HELPER FUNCTIONS (ROBUST & WORKING) --------------------
+# -------------------- HELPER FUNCTIONS --------------------
 
 async def join_target_chat(ubot, chat_link: str):
     chat_link = chat_link.strip()
@@ -111,61 +111,52 @@ async def join_target_chat(ubot, chat_link: str):
         except Exception:
             return True, None, "Already Joined"
     except InviteRequestSent:
-        return True, None, "Request Sent ⏳"
-    except FloodWait as e:
-        try:
-            await asyncio.sleep(min(e.value, 3))
-            chat = await ubot.join_chat(chat_link)
-            return True, chat, "Joined Successfully"
-        except Exception:
-            return False, None, "FloodWait Error"
+        return True, None, "Request Sent (Admin Approval Pending) ⏳"
     except Exception as e:
-        err_str = str(e)
-        if "USER_ALREADY_PARTICIPANT" in err_str:
+        err_msg = str(e)
+        if "USER_ALREADY_PARTICIPANT" in err_msg:
             return True, None, "Already Joined"
-        if "INVITE_REQUEST_SENT" in err_str:
-            return True, None, "Request Sent ⏳"
-        try:
-            chat = await ubot.get_chat(chat_link)
-            return True, chat, "Joined Successfully"
-        except Exception:
-            return False, None, err_str
+        if "INVITE_REQUEST_SENT" in err_msg:
+            return True, None, "Request Sent (Admin Approval Pending) ⏳"
+        return False, None, err_msg
 
 
 async def join_vc_session(ubot, chat_link: str):
+    success, chat, msg = await join_target_chat(ubot, chat_link)
+    if not success and "Already Joined" not in msg and "Request Sent" not in msg:
+        return False, f"Chat Join Error: {msg}"
+
     try:
-        success, chat, msg = await join_target_chat(ubot, chat_link)
         if not chat:
-            try:
-                chat = await ubot.get_chat(chat_link.strip())
-            except Exception:
-                pass
-        
-        if chat:
-            peer = await ubot.resolve_peer(chat.id)
-            if chat.type in [ChatType.CHANNEL, ChatType.SUPERGROUP]:
-                full_chat = await ubot.invoke(functions.channels.GetFullChannel(channel=peer))
-            else:
-                full_chat = await ubot.invoke(functions.messages.GetFullChat(chat_id=chat.id))
+            chat = await ubot.get_chat(chat_link.strip())
 
-            call = full_chat.full_chat.call
-            if call:
-                random_ssrc = random.randint(100000, 999999)
-                params_data = f'{{"muted": true, "video_stopped": true, "ssrc": {random_ssrc}}}'
+        peer = await ubot.resolve_peer(chat.id)
+        if chat.type in [ChatType.CHANNEL, ChatType.SUPERGROUP]:
+            full_chat = await ubot.invoke(functions.channels.GetFullChannel(channel=peer))
+        else:
+            full_chat = await ubot.invoke(functions.messages.GetFullChat(chat_id=chat.id))
 
-                await ubot.invoke(
-                    functions.phone.JoinGroupCall(
-                        call=types.InputGroupCall(id=call.id, access_hash=call.access_hash),
-                        join_as=await ubot.resolve_peer("me"),
-                        params=types.DataJSON(data=params_data),
-                        muted=True
-                    )
-                )
+        call = full_chat.full_chat.call
+        if not call:
+            return False, "Is group/channel me Voice Chat ACTIVE nahi hai!"
+
+        random_ssrc = random.randint(100000, 999999)
+        params_data = f'{{"muted": true, "video_stopped": true, "ssrc": {random_ssrc}}}'
+
+        await ubot.invoke(
+            functions.phone.JoinGroupCall(
+                call=types.InputGroupCall(id=call.id, access_hash=call.access_hash),
+                join_as=await ubot.resolve_peer("me"),
+                params=types.DataJSON(data=params_data),
+                muted=True
+            )
+        )
         return True, "VC Connected"
     except Exception as e:
-        if "GROUPCALL_ALREADY_JOINED" in str(e):
-            return True, "Already in VC"
-        return False, str(e)
+        err_str = str(e)
+        if any(x in err_str for x in ["GROUPCALL_SSRC_DUPLICATE", "GROUPCALL_ALREADY_JOINED", "SSRC_DUPLICATE_MUCH"]):
+            return True, "Already Connected in VC"
+        return False, f"VC Error: {err_str}"
 
 
 async def leave_vc_all():
@@ -175,7 +166,7 @@ async def leave_vc_all():
 
     left_count = 0
     target = CURRENT_VC_CHAT
-    CURRENT_VC_CHAT = None
+    CURRENT_VC_CHAT = None  # Stop keep-alive loop
 
     for session_str, ubot in list(USERBOT_SESSIONS.items()):
         try:
@@ -203,6 +194,7 @@ async def leave_vc_all():
 
 
 async def vc_keepalive_loop():
+    """Background task to keep accounts in VC 24/7 without getting dropped"""
     global ACTIVE_VC_COUNT
     while True:
         await asyncio.sleep(15)
@@ -228,9 +220,17 @@ async def leave_all_channels_robust(ubot):
                 try:
                     await ubot.leave_chat(dialog.chat.id)
                     left_count += 1
+                    await asyncio.sleep(0.8)
                 except UserCreator:
                     skipped_count += 1
                     continue
+                except FloodWait as e:
+                    await asyncio.sleep(e.value + 1)
+                    try:
+                        await ubot.leave_chat(dialog.chat.id)
+                        left_count += 1
+                    except Exception:
+                        pass
                 except Exception:
                     continue
     except Exception as e:
@@ -253,7 +253,7 @@ def get_panel_text():
     )
 
 def get_main_keyboard():
-    enabled = BUTTON_COLOUR
+    enabled = BUTTON_COLOUR  # Yeh boolean True/False aayega config se
     return InlineKeyboardMarkup([
         [
             create_safe_button("➕ ADD ACCOUNT", "add_account", enabled),
@@ -434,6 +434,7 @@ async def callback_handler(client, callback_query: CallbackQuery):
         )
 
     elif data == "refresh":
+        # Synchronize active accounts and live VC connections
         alive_accounts = 0
         for session_str, ubot in list(USERBOT_SESSIONS.items()):
             if ubot.is_connected:
@@ -516,7 +517,7 @@ async def callback_handler(client, callback_query: CallbackQuery):
         await callback_query.edit_message_text(text=get_panel_text(), reply_markup=get_main_keyboard())
 
 
-# -------------------- INPUT PROCESSING HANDLER (SAFE SEQUENTIAL) --------------------
+# -------------------- INPUT PROCESSING HANDLER --------------------
 
 @app.on_message(filters.private & ~filters.command(["start"]))
 async def message_input_handler(client, message):
@@ -547,45 +548,43 @@ async def message_input_handler(client, message):
 
     elif state == "WAITING_FOR_JOIN_LINK":
         USER_STATES.pop(user_id, None)
-        msg = await message.reply_text("⏳ Processing channel join sequentially...")
-        
-        joined = 0
-        failed = 0
-        for session_str, ubot in USERBOT_SESSIONS.items():
-            try:
-                ok, _, _ = await join_target_chat(ubot, text)
-                if ok:
-                    joined += 1
-                else:
-                    failed += 1
-                await asyncio.sleep(0.4)
-            except Exception:
-                failed += 1
+        msg = await message.reply_text("⏳ Processing accounts join...")
+        joined, failed, reasons = 0, 0, []
 
-        await msg.edit_text(f"✅ **Channel Join Result**\n\n• Successfully Joined: {joined}\n• Failed/Errors: {failed}")
+        for session_str, ubot in USERBOT_SESSIONS.items():
+            ok, chat_obj, err_msg = await join_target_chat(ubot, text)
+            if ok:
+                joined += 1
+            else:
+                failed += 1
+                reasons.append(err_msg)
+
+        detail_text = f"✅ **Join Operation Complete**\n\n• Joined/Already in Chat: {joined}\n• Failed: {failed}"
+        if reasons:
+            detail_text += f"\n\n❌ **Error Detail:** {reasons[0]}"
+        await msg.edit_text(detail_text)
 
     elif state == "WAITING_FOR_VC_LINK":
         global ACTIVE_VC_COUNT, CURRENT_VC_CHAT
         USER_STATES.pop(user_id, None)
-        msg = await message.reply_text("⏳ Connecting Voice Chat accounts...")
+        msg = await message.reply_text("⏳ Connecting Voice Chat 24/7...")
+        connected, failed, vc_errors = 0, 0, []
 
-        CURRENT_VC_CHAT = text  
-        connected = 0
-        failed = 0
-        
+        CURRENT_VC_CHAT = text  # Enable keep-alive tracking for 24/7 active status
+
         for session_str, ubot in USERBOT_SESSIONS.items():
-            try:
-                ok, _ = await join_vc_session(ubot, text)
-                if ok:
-                    connected += 1
-                else:
-                    failed += 1
-                await asyncio.sleep(0.4)
-            except Exception:
+            ok, err_msg = await join_vc_session(ubot, text)
+            if ok:
+                connected += 1
+            else:
                 failed += 1
+                vc_errors.append(err_msg)
 
         ACTIVE_VC_COUNT = connected
-        await msg.edit_text(f"🎙 **VC Join Result**\n\n• Connected: {connected}\n• Failed: {failed}")
+        resp_text = f"🎙 **VC Join Status (24/7 Mode Active)**\n\n• Connected: {connected}\n• Failed: {failed}"
+        if vc_errors:
+            resp_text += f"\n\n⚠️ **Reason:** {vc_errors[0]}"
+        await msg.edit_text(resp_text)
 
     elif state == "WAITING_FOR_POST_LINK":
         USER_STATES.pop(user_id, None)
@@ -609,7 +608,7 @@ async def message_input_handler(client, message):
 
             if success == 0:
                 await message.reply_text(
-                    "⚠️ **0 Reactions Sent!**\n\nPossible Reasons:\n1. Private channel hai aur userbots abhi usme Joined NAHI hain.\n2. Post link/ID galat hai.",
+                    "⚠️ **0 Reactions Sent!**\n\nPossible Reasons:\n1. Private channel hai aur userbots abhi usme Joined NAHI hain (pehle JOIN CHANNEL button se join karayein).\n2. Post link/ID galat hai.",
                     reply_markup=get_main_keyboard()
                 )
             else:
@@ -642,3 +641,4 @@ async def main():
 if __name__ == "__main__":
     loop = asyncio.get_event_loop()
     loop.run_until_complete(main())
+    
