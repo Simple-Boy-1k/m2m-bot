@@ -5,7 +5,7 @@ import random
 import motor.motor_asyncio
 from pyrogram import Client, filters
 from pyrogram.enums import ChatType
-from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
+from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery, WebAppInfo
 from pyrogram.errors import (
     UserDeactivated, 
     SessionRevoked, 
@@ -29,6 +29,9 @@ API_HASH = os.environ.get("API_HASH")
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 OWNER_ID_RAW = os.environ.get("OWNER_ID")
 MONGO_URL = os.environ.get("MONGO_URL")
+
+# Dynamic Button Colour Config (Music Bot style toggle compatibility)
+BUTTON_COLOUR = os.environ.get("BUTTON_COLOUR", "True").lower() in ("true", "1", "t")
 
 missing_vars = []
 if not API_ID_RAW: missing_vars.append("API_ID")
@@ -244,31 +247,47 @@ def get_panel_text():
     )
 
 def get_main_keyboard():
-    return InlineKeyboardMarkup([
-        [
-            InlineKeyboardButton("➕ ADD ACCOUNT", callback_data="add_account"),
-            InlineKeyboardButton("🚀 JOIN CHANNEL", callback_data="join_channel")
-        ],
-        [
-            InlineKeyboardButton("🎙 VC JOINER", callback_data="vc_joiner"),
-            InlineKeyboardButton("🔴 VC LEAVE", callback_data="vc_leave")
-        ],
-        [
-            InlineKeyboardButton("🚪 LEAVE ALL CHANNEL", callback_data="leave_all_channel"),
-            InlineKeyboardButton("🔔 PURGE DEAD", callback_data="purge_dead")
-        ],
-        [
-            InlineKeyboardButton("❤️ REACT + VIEWS", callback_data="react_views"),
-            InlineKeyboardButton("👁 VIEWS TOGGLE", callback_data="views_toggle")
-        ],
-        [
-            InlineKeyboardButton("♻️ RECYCLE ACCOUNTS", callback_data="recycle_accounts"),
-            InlineKeyboardButton("🔐 ADMIN PANEL", callback_data="admin_panel")
-        ],
-        [
-            InlineKeyboardButton("🔄 REFRESH", callback_data="refresh")
-        ]
-    ])
+    # If BUTTON_COLOUR is enabled, we map optimized layout hooks
+    if BUTTON_COLOUR:
+        return InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton("➕ ADD ACCOUNT", callback_data="add_account"),
+                InlineKeyboardButton("🚀 JOIN CHANNEL", callback_data="join_channel")
+            ],
+            [
+                InlineKeyboardButton("🎙 VC JOINER", callback_data="vc_joiner"),
+                InlineKeyboardButton("🔴 VC LEAVE", callback_data="vc_leave")
+            ],
+            [
+                InlineKeyboardButton("🚪 LEAVE ALL CHANNEL", callback_data="leave_all_channel"),
+                InlineKeyboardButton("🔔 PURGE DEAD", callback_data="purge_dead")
+            ],
+            [
+                InlineKeyboardButton("❤️ REACT + VIEWS", callback_data="react_views"),
+                InlineKeyboardButton("👁 VIEWS TOGGLE", callback_data="views_toggle")
+            ],
+            [
+                InlineKeyboardButton("♻️ RECYCLE ACCOUNTS", callback_data="recycle_accounts"),
+                InlineKeyboardButton("🔐 ADMIN PANEL", callback_data="admin_panel")
+            ],
+            [
+                InlineKeyboardButton("🔄 REFRESH", callback_data="refresh")
+            ]
+        ])
+    else:
+        return InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton("➕ ADD ACCOUNT", callback_data="add_account"),
+                InlineKeyboardButton("🚀 JOIN CHANNEL", callback_data="join_channel")
+            ],
+            [
+                InlineKeyboardButton("🎙 VC JOINER", callback_data="vc_joiner"),
+                InlineKeyboardButton("🔴 VC LEAVE", callback_data="vc_leave")
+            ],
+            [
+                InlineKeyboardButton("🔄 REFRESH", callback_data="refresh")
+            ]
+        ])
 
 def get_admin_menu_keyboard():
     return InlineKeyboardMarkup([
