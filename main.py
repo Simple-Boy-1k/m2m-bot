@@ -2,9 +2,17 @@ import os
 import logging
 import asyncio
 from pyrogram import Client, filters
+from pyrogram.enums import ChatType
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
-from pyrogram.errors import UserDeactivated, SessionRevoked, AuthKeyUnregistered, PeerIdInvalid
-from pyrogram.raw import functions
+from pyrogram.errors import (
+    UserDeactivated, 
+    SessionRevoked, 
+    AuthKeyUnregistered, 
+    UserAlreadyParticipant,
+    FloodWait,
+    UserCreator
+)
+from pyrogram.raw import functions, types
 
 # Logging setup
 logging.basicConfig(level=logging.INFO)
@@ -16,7 +24,6 @@ BOT_TOKEN = os.environ.get("BOT_TOKEN", "YOUR_BOT_TOKEN")  # Bot Token dalein
 OWNER_ID = int(os.environ.get("OWNER_ID", "123456789"))   # Apna Telegram User ID dalein
 # =======================================================
 
-# Database & Memory Storage
 ADMIN_IDS = {OWNER_ID}
 USERBOT_SESSIONS = {}   # session_string -> Client instance
 ACTIVE_VC_COUNT = 0
@@ -25,7 +32,106 @@ USER_STATES = {}        # Track input state
 
 app = Client("account_manager_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
 
-# Dynamic Control Panel Text
+# -------------------- HELPER FUNCTIONS --------------------
+
+async def join_target_chat(ubot, chat_link: str):
+    """Handles all link formats: @username, https://t.me/username, https://t.me/+privatehash"""
+    chat_link = chat_link.strip()
+    
+    # Private Invite Link
+    if "t.me/+" in chat_link or "joinchat/" in chat_link:
+        if "t.me/+" in chat_link:
+            invite_hash = chat_link.split("t.me/+")[-1].split("/")[0].split("?")[0]
+        else:
+            invite_hash = chat_link.split("joinchat/")[-1].split("/")[0].split("?")[0]
+        
+        try:
+            chat = await ubot.import_chat_invite(invite_hash)
+            return True, chat, "Joined via Private Link"
+        except UserAlreadyParticipant:
+            return True, None, "Already Joined"
+        except Exception as e:
+            return False, None, str(e)
+
+    # Public Link / Username
+    else:
+        username = chat_link.replace("https://t.me/", "").replace("http://t.me/", "").replace("@", "").split("/")[0].split("?")[0]
+        try:
+            chat = await ubot.join_chat(username)
+            return True, chat, "Joined Public Chat"
+        except UserAlreadyParticipant:
+            chat = await ubot.get_chat(username)
+            return True, chat, "Already Joined"
+        except Exception as e:
+            return False, None, str(e)
+
+
+async def join_vc_session(ubot, chat_link: str):
+    """Joins Voice Chat using Raw Telegram API Protocol"""
+    success, chat, msg = await join_target_chat(ubot, chat_link)
+    if not success and "Already Joined" not in msg:
+        return False, f"Chat Join Error: {msg}"
+
+    if not chat:
+        username = chat_link.replace("https://t.me/", "").replace("http://t.me/", "").replace("@", "").split("/")[0].split("?")[0]
+        chat = await ubot.get_chat(username)
+
+    try:
+        peer = await ubot.resolve_peer(chat.id)
+        if chat.type in [ChatType.CHANNEL, ChatType.SUPERGROUP]:
+            full_chat = await ubot.invoke(functions.channels.GetFullChannel(channel=peer))
+        else:
+            full_chat = await ubot.invoke(functions.messages.GetFullChat(chat_id=chat.id))
+
+        call = full_chat.full_chat.call
+        if not call:
+            return False, "Is group me Voice Chat ACTIVE nahi hai!"
+
+        await ubot.invoke(
+            functions.phone.JoinGroupCall(
+                call=types.InputGroupCall(id=call.id, access_hash=call.access_hash),
+                join_as=await ubot.resolve_peer("me"),
+                params=types.DataJSON(data='{"muted": true, "video_stopped": true}'),
+                muted=True
+            )
+        )
+        return True, "VC Connected"
+    except Exception as e:
+        return False, f"VC Error: {str(e)}"
+
+
+async def leave_all_channels_robust(ubot):
+    """Robust Mass Channel/Group Leave with FloodWait protection"""
+    left_count = 0
+    skipped_count = 0
+
+    try:
+        async for dialog in ubot.get_dialogs():
+            if dialog.chat.type in [ChatType.CHANNEL, ChatType.GROUP, ChatType.SUPERGROUP]:
+                try:
+                    await ubot.leave_chat(dialog.chat.id)
+                    left_count += 1
+                    await asyncio.sleep(0.8)  # Safe delay to prevent limits
+                except UserCreator:
+                    # Own banaye hue channels/groups leave nahi ho sakte
+                    skipped_count += 1
+                    continue
+                except FloodWait as e:
+                    await asyncio.sleep(e.value + 1)
+                    try:
+                        await ubot.leave_chat(dialog.chat.id)
+                        left_count += 1
+                    except Exception:
+                        pass
+                except Exception:
+                    continue
+    except Exception as e:
+        logging.error(f"Error during channel leave: {e}")
+
+    return left_count, skipped_count
+
+# -------------------- CONTROL PANEL LAYOUTS --------------------
+
 def get_panel_text():
     views_status = "ENABLED ✅" if AUTO_VIEWS_ENABLED else "DISABLED ❌"
     return (
@@ -35,8 +141,6 @@ def get_panel_text():
         "🟢 <b>STATUS</b>: ONLINE 24/7 (System Ready)\n"
         f"👁 <b>AUTO-VIEWS</b>: {views_status}"
     )
-
-# -------------------- KEYBOARD LAYOUTS --------------------
 
 def get_main_keyboard():
     return InlineKeyboardMarkup([
@@ -112,7 +216,7 @@ async def callback_handler(client, callback_query: CallbackQuery):
             reply_markup=get_back_button()
         )
 
-    # 2. JOIN CHANNEL (REAL JOIN LOGIC)
+    # 2. JOIN CHANNEL
     elif data == "join_channel":
         if not USERBOT_SESSIONS:
             await callback_query.answer("Pehle kam se kam ek account add karein!", show_alert=True)
@@ -120,7 +224,7 @@ async def callback_handler(client, callback_query: CallbackQuery):
         USER_STATES[user_id] = "WAITING_FOR_JOIN_LINK"
         await callback_query.answer()
         await callback_query.edit_message_text(
-            text="<b>🚀 Join Channel</b>\n\nJis Channel/Group me sabhi accounts join karwane hain uska Username ya Link send karein:",
+            text="<b>🚀 Join Channel / Group</b>\n\nPublic link (`https://t.me/name`) ya Private Invite Link (`https://t.me/+xxx`) send karein:",
             reply_markup=get_back_button()
         )
 
@@ -132,39 +236,43 @@ async def callback_handler(client, callback_query: CallbackQuery):
         USER_STATES[user_id] = "WAITING_FOR_VC_LINK"
         await callback_query.answer()
         await callback_query.edit_message_text(
-            text="<b>🎙 VC Joiner</b>\n\nVoice Chat waale Group ka Username/Link send karein:",
+            text="<b>🎙 VC Joiner</b>\n\nJis Group me VC chal rahi hai uska Link ya Username send karein:",
             reply_markup=get_back_button()
         )
 
     # 4. VC LEAVE
     elif data == "vc_leave":
         ACTIVE_VC_COUNT = 0
-        await callback_query.answer("Sabhi accounts Voice Chat se leave ho gaye!", show_alert=True)
+        await callback_query.answer("VC status reseted!", show_alert=True)
         await callback_query.edit_message_text(text=get_panel_text(), reply_markup=get_main_keyboard())
 
-    # 5. LEAVE ALL CHANNELS (REAL MASS LEAVE)
+    # 5. LEAVE ALL CHANNEL (FULLY FIXED & ROBUST)
     elif data == "leave_all_channel":
         if not USERBOT_SESSIONS:
             await callback_query.answer("Koi active account nahi hai!", show_alert=True)
             return
         
-        await callback_query.answer("Cleaning channels...", show_alert=True)
-        count = 0
+        await callback_query.answer("Mass channel cleanup start ho raha hai...", show_alert=True)
+        await callback_query.edit_message_text("⏳ **Cleaning Process Active:** Sabhi accounts se channels/groups leave kiye ja rahe hain...")
+
+        total_left = 0
+        total_skipped = 0
+
         for session_str, ubot in list(USERBOT_SESSIONS.items()):
-            try:
-                async for dialog in ubot.get_dialogs():
-                    if dialog.chat.type.value in ["channel", "group", "supergroup"]:
-                        await ubot.leave_chat(dialog.chat.id)
-                        count += 1
-                        await asyncio.sleep(1)
-            except Exception:
-                continue
+            left, skipped = await leave_all_channels_robust(ubot)
+            total_left += left
+            total_skipped += skipped
+
         await callback_query.edit_message_text(
-            text=f"✅ Total {count} channels/groups leave kar diye gaye hain.",
+            text=(
+                "<b>🚪 LEAVE ALL CHANNELS COMPLETE</b>\n\n"
+                f"✅ <b>Successfully Left:</b> {total_left} Channels/Groups\n"
+                f"⚠️ <b>Skipped (Owned/Created):</b> {total_skipped} Channels"
+            ),
             reply_markup=get_back_button()
         )
 
-    # 6. PURGE DEAD (REAL VALIDATION)
+    # 6. PURGE DEAD
     elif data == "purge_dead":
         await callback_query.answer("Testing accounts...", show_alert=True)
         dead_count = 0
@@ -188,7 +296,7 @@ async def callback_handler(client, callback_query: CallbackQuery):
         USER_STATES[user_id] = "WAITING_FOR_POST_LINK"
         await callback_query.answer()
         await callback_query.edit_message_text(
-            text="<b>❤️ React + Views</b>\n\nTelegram Post ka Link send karein (Format: `https://t.me/channel/123`):",
+            text="<b>❤️ React + Views</b>\n\nTelegram Post ka Link send karein (`https://t.me/channel/123`):",
             reply_markup=get_back_button()
         )
 
@@ -220,7 +328,7 @@ async def callback_handler(client, callback_query: CallbackQuery):
         await callback_query.answer("Refreshed! 🔄")
         await callback_query.edit_message_text(text=get_panel_text(), reply_markup=get_main_keyboard())
 
-    # 11. ADMIN PANEL (OWNER ONLY SECURITY)
+    # 11. ADMIN PANEL (OWNER ONLY)
     elif data == "admin_panel":
         if user_id != OWNER_ID:
             await callback_query.answer("⛔ Only Main Owner can manage Admin Panel!", show_alert=True)
@@ -287,7 +395,6 @@ async def callback_handler(client, callback_query: CallbackQuery):
         USER_STATES.pop(user_id, None)
         await callback_query.edit_message_text(text=get_panel_text(), reply_markup=get_main_keyboard())
 
-
 # -------------------- INPUT PROCESSING HANDLER --------------------
 
 @app.on_message(filters.private & ~filters.command(["start"]))
@@ -318,36 +425,42 @@ async def message_input_handler(client, message):
     # 2. JOIN CHANNEL INPUT
     elif state == "WAITING_FOR_JOIN_LINK":
         USER_STATES.pop(user_id, None)
-        msg = await message.reply_text("⏳ Channels join ho rahe hain...")
-        joined, failed = 0, 0
+        msg = await message.reply_text("⏳ Processing accounts join...")
+        joined, failed, reasons = 0, 0, []
+
         for session_str, ubot in USERBOT_SESSIONS.items():
-            try:
-                await ubot.join_chat(text)
+            ok, chat_obj, err_msg = await join_target_chat(ubot, text)
+            if ok:
                 joined += 1
-            except Exception:
+            else:
                 failed += 1
-        await msg.edit_text(f"✅ **Join Operation Complete**\n\n• Joined: {joined}\n• Failed: {failed}")
+                reasons.append(err_msg)
+
+        detail_text = f"✅ **Join Operation Complete**\n\n• Joined/Already in Chat: {joined}\n• Failed: {failed}"
+        if reasons:
+            detail_text += f"\n\n❌ **Error Detail:** {reasons[0]}"
+        await msg.edit_text(detail_text)
 
     # 3. VC JOINER INPUT
     elif state == "WAITING_FOR_VC_LINK":
         global ACTIVE_VC_COUNT
         USER_STATES.pop(user_id, None)
-        msg = await message.reply_text("⏳ Voice Chat connect ho raha hai...")
-        connected = 0
+        msg = await message.reply_text("⏳ Connecting Voice Chat...")
+        connected, failed, vc_errors = 0, 0, []
+
         for session_str, ubot in USERBOT_SESSIONS.items():
-            try:
-                chat = await ubot.get_chat(text)
-                await ubot.invoke(
-                    functions.phone.CreateGroupCall(
-                        peer=await ubot.resolve_peer(chat.id),
-                        random_id=int(os.urandom(4).hex(), 16)
-                    )
-                )
+            ok, err_msg = await join_vc_session(ubot, text)
+            if ok:
                 connected += 1
-            except Exception:
-                connected += 1
+            else:
+                failed += 1
+                vc_errors.append(err_msg)
+
         ACTIVE_VC_COUNT = connected
-        await msg.edit_text(f"✅ Total {connected} accounts Voice Chat me active kar diye gaye hain.")
+        resp_text = f"🎙 **VC Join Status**\n\n• Connected: {connected}\n• Failed: {failed}"
+        if vc_errors:
+            resp_text += f"\n\n⚠️ **Reason:** {vc_errors[0]}"
+        await msg.edit_text(resp_text)
 
     # 4. REACT + VIEWS INPUT
     elif state == "WAITING_FOR_POST_LINK":
@@ -364,9 +477,9 @@ async def message_input_handler(client, message):
                     success += 1
                 except Exception:
                     continue
-            await message.reply_text(f"✅ Post par {success} Views + Reactions bhej diye gaye hain!")
+            await message.reply_text(f"✅ Post par {success} Views + Reactions bhej diye gaye!")
         except Exception:
-            await message.reply_text("❌ Link galat hai! Sahi Telegram post link dalein.")
+            await message.reply_text("❌ Post Link Format galat hai! Example format: `https://t.me/channel_username/123`")
 
     # 5. ADD ADMIN INPUT
     elif state == "WAITING_FOR_ADMIN_ID":
@@ -379,5 +492,5 @@ async def message_input_handler(client, message):
             await message.reply_text("❌ Sahi numeric Telegram User ID bhejein.")
 
 if __name__ == "__main__":
-    print("Bot is starting with full real features...")
+    print("Bot starting with fixed Channel Leave engine...")
     app.run()
