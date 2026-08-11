@@ -1,238 +1,206 @@
-import asyncio
+import os
+import logging
 from pyrogram import Client, filters
-from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery, Message
+from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
 
-import config
-from keep_alive import keep_alive
-from vc_handler import (
-    join_vc, leave_all_vcs, get_active_count, 
-    join_channel_all, leave_all_channels_all, purge_dead_sessions, 
-    recycle_accounts_all, react_and_views_post
-)
-from database import (
-    add_session, delete_all_sessions, get_sessions_count, 
-    get_auto_views, toggle_auto_views
-)
+# Logging configuration setup
+logging.basicConfig(level=logging.INFO)
 
-keep_alive()
+# ==================== CONFIGURATION (YAHAN APNI DETAILS DALEIN) ====================
+API_ID = int(os.environ.get("API_ID", "123456"))          # Yahan apna API ID dalein
+API_HASH = os.environ.get("API_HASH", "YOUR_API_HASH")    # Yahan apna API HASH dalein
+BOT_TOKEN = os.environ.get("BOT_TOKEN", "YOUR_BOT_TOKEN")  # Yahan BotFather se mila BOT TOKEN dalein
+OWNER_ID = int(os.environ.get("OWNER_ID", "123456789"))   # Yahan apna Telegram User ID dalein
+# ====================================================================================
 
-app = Client(
-    "M2M_VC_Bot",
-    api_id=config.API_ID,
-    api_hash=config.API_HASH,
-    bot_token=config.BOT_TOKEN
-)
+# Admin IDs Set (Owner hamesha by default rehga)
+ADMIN_IDS = {OWNER_ID}
 
-MAIN_KEYBOARD = InlineKeyboardMarkup([
-    [
-        InlineKeyboardButton("➕ ADD ACCOUNT", callback_data="btn_add_account"),
-        InlineKeyboardButton("🚀 JOIN CHANNEL", callback_data="btn_join_channel")
-    ],
-    [
-        InlineKeyboardButton("🎙 VC JOINER", callback_data="btn_vc_joiner"),
-        InlineKeyboardButton("🔴 VC LEAVE", callback_data="btn_vc_leave")
-    ],
-    [
-        InlineKeyboardButton("🚪 LEAVE ALL CHANNEL", callback_data="btn_leave_all_channel"),
-        InlineKeyboardButton("🔔 PURGE DEAD", callback_data="btn_purge_dead")
-    ],
-    [
-        InlineKeyboardButton("❤️ REACT + VIEWS", callback_data="btn_react_views"),
-        InlineKeyboardButton("👁 VIEWS TOGGLE", callback_data="btn_views_toggle")
-    ],
-    [
-        InlineKeyboardButton("♻️ RECYCLE ACCOUNTS", callback_data="btn_recycle_accounts"),
-        InlineKeyboardButton("🔐 ADMIN PANEL", callback_data="btn_admin_panel")
-    ],
-    [
-        InlineKeyboardButton("🔄 REFRESH", callback_data="btn_refresh")
+# Temporary User States (Admin ID receive karne ke liye)
+user_states = {}
+
+# Pyrogram Client Setup
+app = Client("account_manager_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
+
+
+# -------------------- KEYBOARD LAYOUTS --------------------
+
+def get_main_keyboard(user_id):
+    buttons = [
+        [InlineKeyboardButton("➕ Add Account", callback_data="add_account")],
+        [InlineKeyboardButton("❌ Remove Account", callback_data="remove_account")]
     ]
-])
+    # Sirf Main Owner ko hi "👑 Manage Admins" wala button dikhega
+    if user_id == OWNER_ID:
+        buttons.append([InlineKeyboardButton("👑 Manage Admins", callback_data="manage_admins")])
+    
+    return InlineKeyboardMarkup(buttons)
 
-CANCEL_BUTTON = InlineKeyboardMarkup([
-    [InlineKeyboardButton("❌ CANCEL", callback_data="btn_cancel")]
-])
+def get_admin_menu_keyboard():
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("➕ Add New Admin", callback_data="prompt_add_admin")],
+        [InlineKeyboardButton("➖ Remove Admin", callback_data="prompt_remove_admin")],
+        [InlineKeyboardButton("📜 Admin List", callback_data="list_admins")],
+        [InlineKeyboardButton("🔙 Back to Main Menu", callback_data="back_to_main")]
+    ])
 
-USER_STATES = {}
 
-def is_owner(user_id: int) -> bool:
-    return user_id == config.OWNER_ID
-
-async def render_panel_text():
-    acc_count = await get_sessions_count()
-    active_vc = get_active_count()
-    auto_views = await get_auto_views()
-    av_status = "ENABLED ✅" if auto_views else "DISABLED ❌"
-
-    return (
-        "**P2P M2M CONTROL PANEL**\n\n"
-        f"👥 **ACCOUNT** : `{acc_count}` IDs\n"
-        f"🗣 **ACTIVE VC** : `{active_vc}` IDs\n"
-        f"🟢 **STATUS**: ONLINE 24/7 (MongoDB Secured)\n"
-        f"👁 **AUTO-VIEWS**: {av_status}"
-    )
+# -------------------- COMMAND HANDLERS --------------------
 
 @app.on_message(filters.command("start") & filters.private)
-async def start_cmd(client: Client, message: Message):
-    if not is_owner(message.from_user.id):
-        await message.reply_text("❌ **Access Denied!** Only Owner can control this bot.")
+async def start_handler(client, message):
+    user_id = message.from_user.id
+    
+    # Permission Check: Sirf Owner aur Admins access kar sakte hain
+    if user_id not in ADMIN_IDS:
+        await message.reply_text("⛔ **Access Denied:** Aapke paas is bot ka access nahi hai.")
         return
 
-    text = await render_panel_text()
-    await message.reply_text(text, reply_markup=MAIN_KEYBOARD)
+    await message.reply_text(
+        text="<b>⚙️ Account Management Panel</b>\n\nNiche diye gaye options me se select karein:",
+        reply_markup=get_main_keyboard(user_id)
+    )
+
+
+# -------------------- CALLBACK QUERY HANDLER --------------------
 
 @app.on_callback_query()
-async def callback_handler(client: Client, query: CallbackQuery):
-    user_id = query.from_user.id
-    if not is_owner(user_id):
-        await query.answer("❌ Access Denied!", show_alert=True)
+async def callback_handler(client, callback_query: CallbackQuery):
+    user_id = callback_query.from_user.id
+    
+    # Security check: User admin hona chahiye
+    if user_id not in ADMIN_IDS:
+        await callback_query.answer("⛔ Access Denied!", show_alert=True)
         return
 
-    data = query.data
+    data = callback_query.data
 
-    if data == "btn_refresh":
-        text = await render_panel_text()
-        await query.message.edit_text(text, reply_markup=MAIN_KEYBOARD)
-        await query.answer("Panel Refreshed! 🔄", show_alert=False)
-
-    elif data == "btn_add_account":
-        USER_STATES[user_id] = "WAITING_FOR_SESSION"
-        await query.message.edit_text(
-            "🔑 **कृपया अपना Pyrogram v2 String Session यहाँ भेजें:**",
-            reply_markup=CANCEL_BUTTON
+    # 1. Add Account
+    if data == "add_account":
+        await callback_query.answer()
+        await callback_query.edit_message_text(
+            text="<b>➕ Add Account Panel</b>\n\nApna new session string ya login details enter karein:",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back to Menu", callback_data="back_to_main")]])
         )
 
-    elif data == "btn_join_channel":
-        USER_STATES[user_id] = "WAITING_FOR_CHANNEL"
-        await query.message.edit_text(
-            "🚀 **जिस चैनल/ग्रुप को जॉइन कराना है उसका लिंक या यूजरनेम भेजें:**",
-            reply_markup=CANCEL_BUTTON
+    # 2. Remove Account
+    elif data == "remove_account":
+        await callback_query.answer()
+        await callback_query.edit_message_text(
+            text="<b>❌ Remove Account Panel</b>\n\nJo account remove karna hai uska ID select karein:",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back to Menu", callback_data="back_to_main")]])
         )
 
-    elif data == "btn_vc_joiner":
-        USER_STATES[user_id] = "WAITING_FOR_VC"
-        await query.message.edit_text(
-            "🎙 **जिस ग्रुप/चैनल की VC में आईडी जोड़नी है उसका लिंक या यूजरनेम भेजें:**",
-            reply_markup=CANCEL_BUTTON
+    # 3. Admin Management Menu (Owner Only)
+    elif data == "manage_admins":
+        if user_id != OWNER_ID:
+            await callback_query.answer("Sirf Main Owner hi admins manage kar sakta hai!", show_alert=True)
+            return
+        await callback_query.answer()
+        await callback_query.edit_message_text(
+            text="<b>👑 Admin Management Panel</b>\n\nYahan se aap naye admin add ya kisi ko remove kar sakte hain:",
+            reply_markup=get_admin_menu_keyboard()
         )
 
-    elif data == "btn_vc_leave":
-        await query.answer("Leaving VC...", show_alert=False)
-        msg = await query.message.edit_text("⏳ **सभी सेशंस को VC से निकाला जा रहा है...**")
-        count = await leave_all_vcs()
-        text = await render_panel_text()
-        await msg.edit_text(f"✅ **कुल {count} IDs VC से लीव हो चुकी हैं।**\n\n" + text, reply_markup=MAIN_KEYBOARD)
-
-    elif data == "btn_leave_all_channel":
-        await query.answer("Leaving All Channels...", show_alert=False)
-        msg = await query.message.edit_text("⏳ **सभी सेशंस से चैनल्स/ग्रुप्स लीव किए जा रहे हैं...**")
-        count = await leave_all_channels_all(config.API_ID, config.API_HASH)
-        text = await render_panel_text()
-        await msg.edit_text(f"✅ **{count} सेशंस से सारे चैनल्स लीव कर दिए गए हैं।**\n\n" + text, reply_markup=MAIN_KEYBOARD)
-
-    elif data == "btn_purge_dead":
-        await query.answer("Purging Dead Sessions...", show_alert=False)
-        msg = await query.message.edit_text("⏳ **मृत/एक्सपायर्ड सेशंस चेक और डिलीट किए जा रहे हैं...**")
-        removed = await purge_dead_sessions(config.API_ID, config.API_HASH)
-        text = await render_panel_text()
-        await msg.edit_text(f"🔔 **{removed} खराब सेशंस MongoDB से हटा दिए गए।**\n\n" + text, reply_markup=MAIN_KEYBOARD)
-
-    elif data == "btn_recycle_accounts":
-        await query.answer("Recycling Accounts...", show_alert=False)
-        msg = await query.message.edit_text("⏳ **सभी एकाउंट्स रीसाइक्लिंग और री-वेरीफाई किए जा रहे हैं...**")
-        recycled, dead = await recycle_accounts_all(config.API_ID, config.API_HASH)
-        text = await render_panel_text()
-        await msg.edit_text(
-            f"♻️ **Recycle Completed!**\n"
-            f"✅ Valid & Active: `{recycled}` IDs\n"
-            f"❌ Removed Dead: `{dead}` IDs\n\n" + text,
-            reply_markup=MAIN_KEYBOARD
+    # 4. Prompt Add Admin
+    elif data == "prompt_add_admin":
+        if user_id != OWNER_ID:
+            await callback_query.answer("Only Owner can add admins!", show_alert=True)
+            return
+        
+        user_states[user_id] = "WAITING_FOR_ADMIN_ID"
+        await callback_query.answer()
+        await callback_query.edit_message_text(
+            text="<b>➕ Add New Admin</b>\n\nJis user ko Admin banana hai uska <b>Telegram User ID</b> chat me message karein:",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back", callback_data="manage_admins")]])
         )
 
-    elif data == "btn_react_views":
-        USER_STATES[user_id] = "WAITING_FOR_REACT"
-        await query.message.edit_text(
-            "❤️ **पोस्ट लिंक और इमोजी भेजें (Format: `Link Emoji`):**\n\n"
-            "_(उदाहरण: `https://t.me/channel/123 ❤️`)_",
-            reply_markup=CANCEL_BUTTON
+    # 5. Prompt Remove Admin (Shows buttons for each admin)
+    elif data == "prompt_remove_admin":
+        if user_id != OWNER_ID:
+            await callback_query.answer("Only Owner can remove admins!", show_alert=True)
+            return
+
+        # Sabhi admins ke individual removal buttons generate ho rahe hain
+        remove_buttons = []
+        for aid in ADMIN_IDS:
+            if aid != OWNER_ID:  # Owner khud ko remove nahi kar sakta
+                remove_buttons.append([InlineKeyboardButton(f"❌ Remove: {aid}", callback_data=f"rem_adm_{aid}")])
+
+        if not remove_buttons:
+            await callback_query.answer("Koi extra Admin nahi hai jise remove kiya jaye!", show_alert=True)
+            return
+
+        remove_buttons.append([InlineKeyboardButton("🔙 Back", callback_data="manage_admins")])
+        await callback_query.answer()
+        await callback_query.edit_message_text(
+            text="<b>➖ Remove Admin Panel</b>\n\nJis Specific Admin ko hatana hai us par click karein:",
+            reply_markup=InlineKeyboardMarkup(remove_buttons)
         )
 
-    elif data == "btn_views_toggle":
-        new_status = await toggle_auto_views()
-        status_txt = "ENABLED ✅" if new_status else "DISABLED ❌"
-        await query.answer(f"Auto-Views: {status_txt}", show_alert=True)
-        text = await render_panel_text()
-        await query.message.edit_text(text, reply_markup=MAIN_KEYBOARD)
-
-    elif data == "btn_admin_panel":
-        acc_count = await get_sessions_count()
-        active_vc = get_active_count()
-        admin_text = (
-            "🔐 **ADMIN CONTROL PANEL**\n\n"
-            f"👑 **Owner ID:** `{config.OWNER_ID}`\n"
-            f"👥 **Total Accounts:** `{acc_count}`\n"
-            f"🎙 **Active in VC:** `{active_vc}`\n"
-            f"🌐 **Server:** Heroku Active 24/7\n"
-            f"🗄 **Database:** MongoDB Connected\n\n"
-            "सभी फीचर्स और बटन्स पूरी तरह सक्रिय हैं।"
+    # 6. Specific Admin Remove Logic
+    elif data.startswith("rem_adm_"):
+        if user_id != OWNER_ID:
+            await callback_query.answer("Only Owner can remove admins!", show_alert=True)
+            return
+        
+        target_id = int(data.split("_")[2])
+        if target_id in ADMIN_IDS:
+            ADMIN_IDS.remove(target_id)  # Sirf wahi targeted ID remove hogi
+            await callback_query.answer(f"User {target_id} ko admin list se hata diya gaya hai!", show_alert=True)
+        
+        await callback_query.edit_message_text(
+            text="<b>👑 Admin Management Panel</b>\n\nSelected admin successfully remove ho gaya hai.",
+            reply_markup=get_admin_menu_keyboard()
         )
-        await query.message.edit_text(admin_text, reply_markup=MAIN_KEYBOARD)
 
-    elif data == "btn_cancel":
-        if user_id in USER_STATES:
-            del USER_STATES[user_id]
-        text = await render_panel_text()
-        await query.message.edit_text(text, reply_markup=MAIN_KEYBOARD)
+    # 7. List All Admins
+    elif data == "list_admins":
+        admin_text = "<b>📜 Current Admins List:</b>\n\n"
+        for aid in ADMIN_IDS:
+            role = " (Main Owner)" if aid == OWNER_ID else " (Admin)"
+            admin_text += f"• <code>{aid}</code>{role}\n"
+            
+        await callback_query.answer()
+        await callback_query.edit_message_text(
+            text=admin_text,
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back", callback_data="manage_admins")]])
+        )
 
-@app.on_message(filters.private & filters.text & ~filters.command(["start"]))
-async def handle_inputs(client: Client, message: Message):
+    # 8. Back To Main Menu
+    elif data == "back_to_main":
+        user_states.pop(user_id, None)
+        await callback_query.edit_message_text(
+            text="<b>⚙️ Account Management Panel</b>\n\nNiche diye gaye options me se select karein:",
+            reply_markup=get_main_keyboard(user_id)
+        )
+
+
+# -------------------- TEXT MESSAGE HANDLER --------------------
+
+@app.on_message(filters.private & ~filters.command(["start"]))
+async def message_handler(client, message):
     user_id = message.from_user.id
-    if not is_owner(user_id):
-        return
-
-    state = USER_STATES.get(user_id)
-
-    if state == "WAITING_FOR_SESSION":
-        del USER_STATES[user_id]
-        session_str = message.text.strip()
-        added = await add_session(session_str)
-        text = await render_panel_text()
-        if added:
-            await message.reply_text("✅ **String Session सफलतापूर्वक सेव हो गया!**\n\n" + text, reply_markup=MAIN_KEYBOARD)
+    
+    # Input capturing for adding Admin ID
+    if user_id == OWNER_ID and user_states.get(user_id) == "WAITING_FOR_ADMIN_ID":
+        text = message.text.strip()
+        
+        if text.isdigit():
+            new_admin_id = int(text)
+            ADMIN_IDS.add(new_admin_id)
+            user_states.pop(user_id, None)
+            
+            await message.reply_text(
+                f"✅ **Success!** User ID <code>{new_admin_id}</code> ko Admin bana diya gaya hai.",
+                reply_markup=get_admin_menu_keyboard()
+            )
         else:
-            await message.reply_text("⚠️ **यह Session पहले से मौजूद है!**\n\n" + text, reply_markup=MAIN_KEYBOARD)
+            await message.reply_text("❌ Kripya sahi Telegram User ID (numbers) bhejein.")
 
-    elif state == "WAITING_FOR_CHANNEL":
-        del USER_STATES[user_id]
-        target = message.text.strip()
-        status_msg = await message.reply_text("🔄 **चैनल जॉइन कराया जा रहा है...**")
-        succ, fail = await join_channel_all(target, config.API_ID, config.API_HASH)
-        text = await render_panel_text()
-        await status_msg.edit_text(f"🚀 **Channel Join Done!**\n✅ Success: {succ}\n❌ Failed: {fail}\n\n" + text, reply_markup=MAIN_KEYBOARD)
 
-    elif state == "WAITING_FOR_VC":
-        del USER_STATES[user_id]
-        target = message.text.strip()
-        status_msg = await message.reply_text("🎙 **VC से कनेक्ट हो रहा है...**")
-        succ, fail, status = await join_vc(target, config.API_ID, config.API_HASH)
-        text = await render_panel_text()
-        if status == "No Sessions Found":
-            await status_msg.edit_text("❌ **कोई Session नहीं मिला!** पहले `➕ ADD ACCOUNT` से सेशन जोड़ें।", reply_markup=MAIN_KEYBOARD)
-            return
-        await status_msg.edit_text(f"🎙 **VC Join Completed!**\n👍 Success: {succ}\n👎 Failed: {fail}\n\n" + text, reply_markup=MAIN_KEYBOARD)
-
-    elif state == "WAITING_FOR_REACT":
-        del USER_STATES[user_id]
-        parts = message.text.strip().split()
-        if len(parts) < 2:
-            await message.reply_text("❌ गलत फॉर्मेट! `Link Emoji` फॉर्मेट में भेजें।", reply_markup=MAIN_KEYBOARD)
-            return
-        link, emoji = parts[0], parts[1]
-        status_msg = await message.reply_text("🔄 **Reactions और Views भेजे जा रहे हैं...**")
-        count = await react_and_views_post(link, emoji, config.API_ID, config.API_HASH)
-        text = await render_panel_text()
-        await status_msg.edit_text(f"❤️ **{count} सेशंस से Reaction & View सफलतापूर्वक भेजे गए!**\n\n" + text, reply_markup=MAIN_KEYBOARD)
+# -------------------- BOT STARTUP --------------------
 
 if __name__ == "__main__":
-    print("P2M M2M Control Panel Starting...")
+    print("Sarkar_Bot_Start...")
     app.run()
