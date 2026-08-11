@@ -83,35 +83,22 @@ async def load_data_from_db():
     logging.info(f"Database sync complete! Total {loaded_count} accounts aur {len(ADMIN_IDS)} admins restored.")
 
 
-# -------------------- HELPER FUNCTIONS --------------------
+# -------------------- HELPER FUNCTIONS (FIXED) --------------------
 
 async def join_target_chat(ubot, chat_link: str):
     chat_link = chat_link.strip()
-    
-    if "t.me/+" in chat_link or "joinchat/" in chat_link:
-        if "t.me/+" in chat_link:
-            invite_hash = chat_link.split("t.me/+")[-1].split("/")[0].split("?")[0]
-        else:
-            invite_hash = chat_link.split("joinchat/")[-1].split("/")[0].split("?")[0]
-        
+    try:
+        # Pyrogram v2 me join_chat public/private link aur username sab handle kar leta hai
+        chat = await ubot.join_chat(chat_link)
+        return True, chat, "Joined Successfully"
+    except UserAlreadyParticipant:
         try:
-            chat = await ubot.import_chat_invite(invite_hash)
-            return True, chat, "Joined via Private Link"
-        except UserAlreadyParticipant:
-            return True, None, "Already Joined"
-        except Exception as e:
-            return False, None, str(e)
-
-    else:
-        username = chat_link.replace("https://t.me/", "").replace("http://t.me/", "").replace("@", "").split("/")[0].split("?")[0]
-        try:
-            chat = await ubot.join_chat(username)
-            return True, chat, "Joined Public Chat"
-        except UserAlreadyParticipant:
-            chat = await ubot.get_chat(username)
+            chat = await ubot.get_chat(chat_link)
             return True, chat, "Already Joined"
-        except Exception as e:
-            return False, None, str(e)
+        except Exception:
+            return True, None, "Already Joined"
+    except Exception as e:
+        return False, None, str(e)
 
 
 async def join_vc_session(ubot, chat_link: str):
@@ -119,11 +106,10 @@ async def join_vc_session(ubot, chat_link: str):
     if not success and "Already Joined" not in msg:
         return False, f"Chat Join Error: {msg}"
 
-    if not chat:
-        username = chat_link.replace("https://t.me/", "").replace("http://t.me/", "").replace("@", "").split("/")[0].split("?")[0]
-        chat = await ubot.get_chat(username)
-
     try:
+        if not chat:
+            chat = await ubot.get_chat(chat_link.strip())
+
         peer = await ubot.resolve_peer(chat.id)
         if chat.type in [ChatType.CHANNEL, ChatType.SUPERGROUP]:
             full_chat = await ubot.invoke(functions.channels.GetFullChannel(channel=peer))
@@ -132,7 +118,7 @@ async def join_vc_session(ubot, chat_link: str):
 
         call = full_chat.full_chat.call
         if not call:
-            return False, "Is group me Voice Chat ACTIVE nahi hai!"
+            return False, "Is group/channel me Voice Chat ACTIVE nahi hai!"
 
         await ubot.invoke(
             functions.phone.JoinGroupCall(
