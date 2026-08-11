@@ -26,7 +26,7 @@
       "value": "",
       "required": true
     },
-    "MONGO_DB_URI": {
+    "MONGO_URL": {
       "description": "Get a mongodb url from https://cloud.mongodb.com",
       "value": "mongodb+srv://sksahnawaj89_db_user:4TjZxb4Xfz0O0TNr@cluster0.5raayqr.mongodb.net/?appName=Cluster0",
       "required": true
