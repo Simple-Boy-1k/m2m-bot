@@ -20,6 +20,9 @@ from pyrogram.errors import (
 )
 from pyrogram.raw import functions, types
 
+from config_buttons import create_safe_button
+
+
 # Logging setup
 logging.basicConfig(level=logging.INFO)
 
