@@ -1,4 +1,4 @@
-# 🚀 M2M VC Joiner Bot
+# 🚀 𝙎𝘼𝙍𝙆𝘼𝙍 :: メ :: 𝙈𝙊𝘿 𝗠𝟮𝗠
 
 Telegram Voice Chat & Live Stream Joiner Bot with Owner Control System & In-Bot Session Management.
 
