@@ -1,6 +1,7 @@
 import os
 import logging
 import asyncio
+import random
 import motor.motor_asyncio
 from pyrogram import Client, filters
 from pyrogram.enums import ChatType
@@ -11,14 +12,18 @@ from pyrogram.errors import (
     AuthKeyUnregistered, 
     UserAlreadyParticipant,
     FloodWait,
-    UserCreator
+    UserCreator,
+    InviteRequestSent,
+    ChannelInvalid,
+    UsernameInvalid,
+    PeerIdInvalid
 )
 from pyrogram.raw import functions, types
 
 # Logging setup
 logging.basicConfig(level=logging.INFO)
 
-# ==================== CONFIGURATION (DEBUG VERIFIED) ====================
+# ==================== CONFIGURATION ====================
 API_ID_RAW = os.environ.get("API_ID")
 API_HASH = os.environ.get("API_HASH")
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
@@ -83,12 +88,11 @@ async def load_data_from_db():
     logging.info(f"Database sync complete! Total {loaded_count} accounts aur {len(ADMIN_IDS)} admins restored.")
 
 
-# -------------------- HELPER FUNCTIONS (FIXED) --------------------
+# -------------------- HELPER FUNCTIONS --------------------
 
 async def join_target_chat(ubot, chat_link: str):
     chat_link = chat_link.strip()
     try:
-        # Pyrogram v2 me join_chat public/private link aur username sab handle kar leta hai
         chat = await ubot.join_chat(chat_link)
         return True, chat, "Joined Successfully"
     except UserAlreadyParticipant:
@@ -97,13 +101,20 @@ async def join_target_chat(ubot, chat_link: str):
             return True, chat, "Already Joined"
         except Exception:
             return True, None, "Already Joined"
+    except InviteRequestSent:
+        return True, None, "Request Sent (Admin Approval Pending) ⏳"
     except Exception as e:
-        return False, None, str(e)
+        err_msg = str(e)
+        if "USER_ALREADY_PARTICIPANT" in err_msg:
+            return True, None, "Already Joined"
+        if "INVITE_REQUEST_SENT" in err_msg:
+            return True, None, "Request Sent (Admin Approval Pending) ⏳"
+        return False, None, err_msg
 
 
 async def join_vc_session(ubot, chat_link: str):
     success, chat, msg = await join_target_chat(ubot, chat_link)
-    if not success and "Already Joined" not in msg:
+    if not success and "Already Joined" not in msg and "Request Sent" not in msg:
         return False, f"Chat Join Error: {msg}"
 
     try:
@@ -120,17 +131,23 @@ async def join_vc_session(ubot, chat_link: str):
         if not call:
             return False, "Is group/channel me Voice Chat ACTIVE nahi hai!"
 
+        random_ssrc = random.randint(100000, 999999)
+        params_data = f'{{"muted": true, "video_stopped": true, "ssrc": {random_ssrc}}}'
+
         await ubot.invoke(
             functions.phone.JoinGroupCall(
                 call=types.InputGroupCall(id=call.id, access_hash=call.access_hash),
                 join_as=await ubot.resolve_peer("me"),
-                params=types.DataJSON(data='{"muted": true, "video_stopped": true}'),
+                params=types.DataJSON(data=params_data),
                 muted=True
             )
         )
         return True, "VC Connected"
     except Exception as e:
-        return False, f"VC Error: {str(e)}"
+        err_str = str(e)
+        if any(x in err_str for x in ["GROUPCALL_SSRC_DUPLICATE", "GROUPCALL_ALREADY_JOINED", "SSRC_DUPLICATE_MUCH"]):
+            return True, "Already Connected in VC"
+        return False, f"VC Error: {err_str}"
 
 
 async def leave_all_channels_robust(ubot):
@@ -498,11 +515,13 @@ async def message_input_handler(client, message):
                     await ubot.get_messages(channel, msg_id)
                     await ubot.send_reaction(channel, msg_id, "❤️")
                     success += 1
+                except (ChannelInvalid, UsernameInvalid, PeerIdInvalid):
+                    continue
                 except Exception:
                     continue
-            await message.reply_text(f"✅ Post par {success} Views + Reactions bhej diye gaye!")
+            await message.reply_text(f"✅ Post par {success} Views + Reactions bhej diye gaye!", reply_markup=get_main_keyboard())
         except Exception:
-            await message.reply_text("❌ Post Link Format galat hai!")
+            await message.reply_text("❌ Post Link Format galat hai! Clean link bhejein (Example: `https://t.me/channel_name/123`).", reply_markup=get_main_keyboard())
 
     elif state == "WAITING_FOR_ADMIN_ID":
         if user_id == OWNER_ID and text.isdigit():
