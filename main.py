@@ -4,8 +4,14 @@ from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQ
 
 import config
 from keep_alive import keep_alive
-from vc_handler import join_vc, leave_all_vcs, get_active_count
-from database import add_session, delete_all_sessions, get_sessions_count
+from vc_handler import (
+    join_vc, leave_all_vcs, get_active_count, 
+    join_channel_all, leave_all_channels_all, purge_dead_sessions, react_and_views_post
+)
+from database import (
+    add_session, delete_all_sessions, get_sessions_count, 
+    get_auto_views, toggle_auto_views
+)
 
 keep_alive()
 
@@ -16,23 +22,32 @@ app = Client(
     bot_token=config.BOT_TOKEN
 )
 
-START_BUTTONS = InlineKeyboardMarkup([
+# 🎯 SCREENSHOT EXACT BUTTON LAYOUT
+MAIN_KEYBOARD = InlineKeyboardMarkup([
     [
-        InlineKeyboardButton("🚀 Join VC", callback_data="btn_join_vc"),
-        InlineKeyboardButton("🛑 Leave VC", callback_data="btn_leave_vc")
+        InlineKeyboardButton("➕ ADD ACCOUNT", callback_data="btn_add_account"),
+        InlineKeyboardButton("🚀 JOIN CHANNEL", callback_data="btn_join_channel")
     ],
     [
-        InlineKeyboardButton("➕ Add Session", callback_data="btn_add_session"),
-        InlineKeyboardButton("🗑 Clear Sessions", callback_data="btn_clear_sessions")
+        InlineKeyboardButton("🎙 VC JOINER", callback_data="btn_vc_joiner"),
+        InlineKeyboardButton("🔴 VC LEAVE", callback_data="btn_vc_leave")
     ],
     [
-        InlineKeyboardButton("📊 Status", callback_data="btn_status"),
-        InlineKeyboardButton("ℹ️ Help", callback_data="btn_help")
+        InlineKeyboardButton("🚪 LEAVE ALL CHANNEL", callback_data="btn_leave_all_channel"),
+        InlineKeyboardButton("🔔 PURGE DEAD", callback_data="btn_purge_dead")
+    ],
+    [
+        InlineKeyboardButton("❤️ REACT + VIEWS", callback_data="btn_react_views"),
+        InlineKeyboardButton("👁 VIEWS TOGGLE", callback_data="btn_views_toggle")
+    ],
+    [
+        InlineKeyboardButton("🔐 ADMIN PANEL", callback_data="btn_admin_panel"),
+        InlineKeyboardButton("🔄 REFRESH", callback_data="btn_refresh")
     ]
 ])
 
 CANCEL_BUTTON = InlineKeyboardMarkup([
-    [InlineKeyboardButton("❌ Cancel", callback_data="btn_cancel")]
+    [InlineKeyboardButton("❌ CANCEL", callback_data="btn_cancel")]
 ])
 
 USER_STATES = {}
@@ -40,80 +55,115 @@ USER_STATES = {}
 def is_owner(user_id: int) -> bool:
     return user_id == config.OWNER_ID
 
+async def render_panel_text():
+    acc_count = await get_sessions_count()
+    active_vc = get_active_count()
+    auto_views = await get_auto_views()
+    av_status = "ENABLED ✅" if auto_views else "DISABLED ❌"
+
+    return (
+        "**P2P M2M CONTROL PANEL**\n\n"
+        f"👥 **ACCOUNT** : `{acc_count}` IDs\n"
+        f"🗣 **ACTIVE VC** : `{active_vc}` IDs\n"
+        f"🟢 **STATUS**: ONLINE 24/7 (MongoDB Secured)\n"
+        f"👁 **AUTO-VIEWS**: {av_status}"
+    )
+
 @app.on_message(filters.command("start") & filters.private)
 async def start_cmd(client: Client, message: Message):
     if not is_owner(message.from_user.id):
-        await message.reply_text("❌ **Access Denied!**\n\nयह बोट केवल बोट ओनर के लिए है।")
+        await message.reply_text("❌ **Access Denied!** Only Owner can control this bot.")
         return
 
-    text = (
-        "👋 **Welcome Boss!**\n\n"
-        "M2M VC Control Panel सक्रिय है। आप बोट के अंदर ही String Sessions जोड़ सकते हैं:"
-    )
-    await message.reply_text(text, reply_markup=START_BUTTONS)
+    text = await render_panel_text()
+    await message.reply_text(text, reply_markup=MAIN_KEYBOARD)
 
 @app.on_callback_query()
 async def callback_handler(client: Client, query: CallbackQuery):
     user_id = query.from_user.id
     if not is_owner(user_id):
-        await query.answer("❌ सिर्फ बोट ओनर ही इन बटनों को इस्तेमाल कर सकता है!", show_alert=True)
+        await query.answer("❌ Access Denied!", show_alert=True)
         return
 
     data = query.data
 
-    if data == "btn_join_vc":
-        USER_STATES[user_id] = "WAITING_FOR_LINK"
-        await query.message.edit_text(
-            "🔗 **कृपया उस ग्रुप/चैनल का लिंक या यूजरनेम भेजें जहाँ VC जॉइन कराना है:**",
-            reply_markup=CANCEL_BUTTON
-        )
+    if data == "btn_refresh":
+        text = await render_panel_text()
+        await query.message.edit_text(text, reply_markup=MAIN_KEYBOARD)
+        await query.answer("Panel Refreshed! 🔄", show_alert=False)
 
-    elif data == "btn_add_session":
+    elif data == "btn_add_account":
         USER_STATES[user_id] = "WAITING_FOR_SESSION"
         await query.message.edit_text(
             "🔑 **कृपया अपना Pyrogram v2 String Session यहाँ भेजें:**",
             reply_markup=CANCEL_BUTTON
         )
 
-    elif data == "btn_clear_sessions":
-        deleted = await delete_all_sessions()
-        await leave_all_vcs()
-        await query.answer("All Sessions Removed!", show_alert=True)
-        await query.message.edit_text(f"🗑 **सफलतापूर्वक {deleted} सेशंस हटा दिए गए हैं।**", reply_markup=START_BUTTONS)
+    elif data == "btn_join_channel":
+        USER_STATES[user_id] = "WAITING_FOR_CHANNEL"
+        await query.message.edit_text(
+            "🚀 **जिस चैनल/ग्रुप को जॉइन कराना है उसका लिंक या यूजरनेम भेजें:**",
+            reply_markup=CANCEL_BUTTON
+        )
 
-    elif data == "btn_leave_vc":
-        await query.answer("Leaving VCs...", show_alert=False)
-        msg = await query.message.edit_text("⏳ **VC से लीव कराया जा रहा है...**")
+    elif data == "btn_vc_joiner":
+        USER_STATES[user_id] = "WAITING_FOR_VC"
+        await query.message.edit_text(
+            "🎙 **जिस ग्रुप/चैनल की VC में आईडी जोड़नी है उसका लिंक या यूजरनेम भेजें:**",
+            reply_markup=CANCEL_BUTTON
+        )
+
+    elif data == "btn_vc_leave":
+        await query.answer("Leaving VC...", show_alert=False)
+        msg = await query.message.edit_text("⏳ **सभी सेशंस को VC से निकाला जा रहा है...**")
         count = await leave_all_vcs()
-        await msg.edit_text(f"✅ **कुल {count} अकाउंट्स VC से लीव हो चुके हैं।**", reply_markup=START_BUTTONS)
+        text = await render_panel_text()
+        await msg.edit_text(f"✅ **कुल {count} IDs VC से लीव हो चुकी हैं।**\n\n" + text, reply_markup=MAIN_KEYBOARD)
 
-    elif data == "btn_status":
-        active = get_active_count()
-        total_sessions = await get_sessions_count()
-        status_text = (
-            "📊 **M2M VC Bot Status:**\n\n"
-            f"📁 **Total Saved Sessions:** `{total_sessions}`\n"
-            f"🟢 **Active VC Connections:** `{active}`\n"
+    elif data == "btn_leave_all_channel":
+        await query.answer("Leaving All Channels...", show_alert=False)
+        msg = await query.message.edit_text("⏳ **सभी सेशंस से चैनल्स/ग्रुप्स लीव किए जा रहे हैं...**")
+        count = await leave_all_channels_all(config.API_ID, config.API_HASH)
+        text = await render_panel_text()
+        await msg.edit_text(f"✅ **{count} सेशंस से सारे चैनल्स लीव कर दिए गए हैं।**\n\n" + text, reply_markup=MAIN_KEYBOARD)
+
+    elif data == "btn_purge_dead":
+        await query.answer("Purging Dead Sessions...", show_alert=False)
+        msg = await query.message.edit_text("⏳ **मृत/एक्सपायर्ड सेशंस चेक और डिलीट किए जा रहे हैं...**")
+        removed = await purge_dead_sessions(config.API_ID, config.API_HASH)
+        text = await render_panel_text()
+        await msg.edit_text(f"🔔 **{removed} खराब सेशंस MongoDB से हटा दिए गए।**\n\n" + text, reply_markup=MAIN_KEYBOARD)
+
+    elif data == "btn_react_views":
+        USER_STATES[user_id] = "WAITING_FOR_REACT"
+        await query.message.edit_text(
+            "❤️ **पोस्ट लिंक और इमोजी भेजें (Format: `Link Emoji`):**\n\n"
+            "_(उदाहरण: `https://t.me/channel/123 ❤️`)_",
+            reply_markup=CANCEL_BUTTON
+        )
+
+    elif data == "btn_views_toggle":
+        new_status = await toggle_auto_views()
+        status_txt = "ENABLED ✅" if new_status else "DISABLED ❌"
+        await query.answer(f"Auto-Views: {status_txt}", show_alert=True)
+        text = await render_panel_text()
+        await query.message.edit_text(text, reply_markup=MAIN_KEYBOARD)
+
+    elif data == "btn_admin_panel":
+        admin_text = (
+            "🔐 **ADMIN PANEL**\n\n"
             f"👑 **Owner ID:** `{config.OWNER_ID}`\n"
-            f"⚡ **System:** 24/7 Online"
+            f"🌐 **Server:** Heroku Worker Active\n"
+            f"🗄 **DB:** MongoDB Connected\n\n"
+            "सभी कंट्रोल्स मेन पैनल पर एक्टिव हैं।"
         )
-        await query.answer()
-        await query.message.edit_text(status_text, reply_markup=START_BUTTONS)
-
-    elif data == "btn_help":
-        help_text = (
-            "ℹ️ **How to use:**\n\n"
-            "1. **➕ Add Session:** यहाँ बटन दबाकर अपने Userbot का Pyrogram String Session भेजें।\n"
-            "2. **🚀 Join VC:** VC लिंक डालकर सेव किए गए अकाउंट्स को जॉइन कराएं।\n"
-            "3. **🗑 Clear Sessions:** सभी सेव्ड सेशंस डिलीट करें।"
-        )
-        await query.answer()
-        await query.message.edit_text(help_text, reply_markup=START_BUTTONS)
+        await query.message.edit_text(admin_text, reply_markup=MAIN_KEYBOARD)
 
     elif data == "btn_cancel":
         if user_id in USER_STATES:
             del USER_STATES[user_id]
-        await query.message.edit_text("❌ प्रक्रिया रद्द कर दी गई।", reply_markup=START_BUTTONS)
+        text = await render_panel_text()
+        await query.message.edit_text(text, reply_markup=MAIN_KEYBOARD)
 
 @app.on_message(filters.private & filters.text & ~filters.command(["start"]))
 async def handle_inputs(client: Client, message: Message):
@@ -127,30 +177,43 @@ async def handle_inputs(client: Client, message: Message):
         del USER_STATES[user_id]
         session_str = message.text.strip()
         added = await add_session(session_str)
+        text = await render_panel_text()
         if added:
-            total = await get_sessions_count()
-            await message.reply_text(f"✅ **String Session सफलतापूर्वक सेव हो गया!**\n\nकुल सेव्ड सेशंस: `{total}`", reply_markup=START_BUTTONS)
+            await message.reply_text("✅ **String Session सफलतापूर्वक सेव हो गया!**\n\n" + text, reply_markup=MAIN_KEYBOARD)
         else:
-            await message.reply_text("⚠️ **यह Session पहले से सेव है!**", reply_markup=START_BUTTONS)
+            await message.reply_text("⚠️ **यह Session पहले से मौजूद है!**\n\n" + text, reply_markup=MAIN_KEYBOARD)
 
-    elif state == "WAITING_FOR_LINK":
+    elif state == "WAITING_FOR_CHANNEL":
         del USER_STATES[user_id]
-        chat_link = message.text.strip()
-        status_msg = await message.reply_text("🔄 **VC से कनेक्ट हो रहा है, कृपया प्रतीक्षा करें...**")
-        
-        success, failed, status = await join_vc(chat_link, config.API_ID, config.API_HASH)
-        
-        if status == "No Sessions Found":
-            await status_msg.edit_text("❌ **कोई Session नहीं मिला!** पहले `➕ Add Session` बटन दबाकर Session जोड़ें।", reply_markup=START_BUTTONS)
-            return
+        target = message.text.strip()
+        status_msg = await message.reply_text("🔄 **चैनल जॉइन कराया जा रहा है...**")
+        succ, fail = await join_channel_all(target, config.API_ID, config.API_HASH)
+        text = await render_panel_text()
+        await status_msg.edit_text(f"🚀 **Channel Join Done!**\n✅ Success: {succ}\n❌ Failed: {fail}\n\n" + text, reply_markup=MAIN_KEYBOARD)
 
-        result_text = (
-            "🎯 **VC Join Result:**\n\n"
-            f"✅ **Successfully Joined:** `{success}`\n"
-            f"❌ **Failed:** `{failed}`"
-        )
-        await status_msg.edit_text(result_text, reply_markup=START_BUTTONS)
+    elif state == "WAITING_FOR_VC":
+        del USER_STATES[user_id]
+        target = message.text.strip()
+        status_msg = await message.reply_text("🎙 **VC से कनेक्ट हो रहा है...**")
+        succ, fail, status = await join_vc(target, config.API_ID, config.API_HASH)
+        text = await render_panel_text()
+        if status == "No Sessions Found":
+            await status_msg.edit_text("❌ **कोई Session नहीं मिला!** पहले `➕ ADD ACCOUNT` से सेशन जोड़ें।", reply_markup=MAIN_KEYBOARD)
+            return
+        await status_msg.edit_text(f"🎙 **VC Join Completed!**\n👍 Success: {succ}\n👎 Failed: {fail}\n\n" + text, reply_markup=MAIN_KEYBOARD)
+
+    elif state == "WAITING_FOR_REACT":
+        del USER_STATES[user_id]
+        parts = message.text.strip().split()
+        if len(parts) < 2:
+            await message.reply_text("❌ गलत फॉर्मेट! `Link Emoji` फॉर्मेट में भेजें।", reply_markup=MAIN_KEYBOARD)
+            return
+        link, emoji = parts[0], parts[1]
+        status_msg = await message.reply_text("🔄 **Reactions और Views भेजे जा रहे हैं...**")
+        count = await react_and_views_post(link, emoji, config.API_ID, config.API_HASH)
+        text = await render_panel_text()
+        await status_msg.edit_text(f"❤️ **{count} सेशंस से Reaction & View सफलतापूर्वक भेजे गए!**\n\n" + text, reply_markup=MAIN_KEYBOARD)
 
 if __name__ == "__main__":
-    print("M2M VC Bot Started!")
+    print("P2M M2M Control Panel Starting...")
     app.run()
