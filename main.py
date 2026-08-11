@@ -250,51 +250,32 @@ def get_panel_text():
     )
 
 def get_main_keyboard():
-    def get_style():
-        if BUTTON_COLOUR:
-            return {"style": random.choice(STYLES)}
-        return {}
-
-    if BUTTON_COLOUR:
-        return InlineKeyboardMarkup([
-            [
-                InlineKeyboardButton("➕ ADD ACCOUNT", callback_data="add_account", **get_style()),
-                InlineKeyboardButton("🚀 JOIN CHANNEL", callback_data="join_channel", **get_style())
-            ],
-            [
-                InlineKeyboardButton("🎙 VC JOINER", callback_data="vc_joiner", **get_style()),
-                InlineKeyboardButton("🔴 VC LEAVE", callback_data="vc_leave", **get_style())
-            ],
-            [
-                InlineKeyboardButton("🚪 LEAVE ALL CHANNEL", callback_data="leave_all_channel", **get_style()),
-                InlineKeyboardButton("🔔 PURGE DEAD", callback_data="purge_dead", **get_style())
-            ],
-            [
-                InlineKeyboardButton("❤️ REACT + VIEWS", callback_data="react_views", **get_style()),
-                InlineKeyboardButton("👁 VIEWS TOGGLE", callback_data="views_toggle", **get_style())
-            ],
-            [
-                InlineKeyboardButton("♻️ RECYCLE ACCOUNTS", callback_data="recycle_accounts", **get_style()),
-                InlineKeyboardButton("🔐 ADMIN PANEL", callback_data="admin_panel", **get_style())
-            ],
-            [
-                InlineKeyboardButton("🔄 REFRESH", callback_data="refresh", **get_style())
-            ]
-        ])
-    else:
-        return InlineKeyboardMarkup([
-            [
-                InlineKeyboardButton("➕ ADD ACCOUNT", callback_data="add_account"),
-                InlineKeyboardButton("🚀 JOIN CHANNEL", callback_data="join_channel")
-            ],
-            [
-                InlineKeyboardButton("🎙 VC JOINER", callback_data="vc_joiner"),
-                InlineKeyboardButton("🔴 VC LEAVE", callback_data="vc_leave")
-            ],
-            [
-                InlineKeyboardButton("🔄 REFRESH", callback_data="refresh")
-            ]
-        ])
+    enabled = BUTTON_COLOUR  # Yeh boolean True/False aayega config se
+    return InlineKeyboardMarkup([
+        [
+            create_safe_button("➕ ADD ACCOUNT", "add_account", enabled),
+            create_safe_button("🚀 JOIN CHANNEL", "join_channel", enabled)
+        ],
+        [
+            create_safe_button("🎙 VC JOINER", "vc_joiner", enabled),
+            create_safe_button("🔴 VC LEAVE", "vc_leave", enabled)
+        ],
+        [
+            create_safe_button("🚪 LEAVE ALL CHANNEL", "leave_all_channel", enabled),
+            create_safe_button("🔔 PURGE DEAD", "purge_dead", enabled)
+        ],
+        [
+            create_safe_button("❤️ REACT + VIEWS", "react_views", enabled),
+            create_safe_button("👁 VIEWS TOGGLE", "views_toggle", enabled)
+        ],
+        [
+            create_safe_button("♻️ RECYCLE ACCOUNTS", "recycle_accounts", enabled),
+            create_safe_button("🔐 ADMIN PANEL", "admin_panel", enabled)
+        ],
+        [
+            create_safe_button("🔄 REFRESH", "refresh", enabled)
+        ]
+    ])
 
 def get_admin_menu_keyboard():
     return InlineKeyboardMarkup([
