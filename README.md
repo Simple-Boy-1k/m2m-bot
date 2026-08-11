@@ -6,18 +6,16 @@ Telegram Voice Chat & Live Stream Joiner Bot with Owner Control System & In-Bot 
 
 ### 💜 Deploy to Heroku
 
-[![Deploy to Heroku](https://www.herokucdn.com/deploy/button.svg)](https://dashboard.heroku.com/new?template=https://github.com/YOUR_GITHUB_USERNAME/YOUR_REPO_NAME)
-
-> ⚠️ **Note:** Deployment error se bachne ke liye link me `YOUR_GITHUB_USERNAME` aur `YOUR_REPO_NAME` ko apne GitHub details se zaroor replace karein.
+[![Deploy to Heroku](https://www.herokucdn.com/deploy/button.svg)](https://heroku.com/deploy?template=https://github.com/Simple-Boy-1k/m2m-bot)
 
 ---
 
-### 🛠️ Environment Variables Setup
+### 🛠️ Required Environment Variables
 
 | Variable | Description |
 | :--- | :--- |
-| `API_ID` | Telegram API ID from my.telegram.org |
-| `API_HASH` | Telegram API Hash from my.telegram.org |
+| `API_ID` | Telegram API ID from https://my.telegram.org |
+| `API_HASH` | Telegram API Hash from https://my.telegram.org |
 | `BOT_TOKEN` | Bot token from @BotFather |
 | `MONGO_DB_URI` | MongoDB Connection URL from MongoDB Atlas |
 | `OWNER_ID` | Your Telegram Numeric User ID |
