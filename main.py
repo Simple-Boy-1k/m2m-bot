@@ -238,8 +238,9 @@ def get_panel_text():
         "<b>P2P M2M CONTROL PANEL</b>\n\n"
         f"👥 <b>ACCOUNT</b> : {len(USERBOT_SESSIONS)} IDs\n"
         f"🗣 <b>ACTIVE VC</b> : {ACTIVE_VC_COUNT} IDs\n"
-        "🟢 <b>STATUS</b>: ONLINE 24/7 ( नॉक्स भाई और उनके दोस्त को चोर के साबकी माकी Chu**😂😂)\n"
+        "🟢 <b>STATUS</b>: ONLINE 24/7 ( ☆☬𝙎𝘼𝙍𝙆𝘼𝙍 :: メ :: 𝙉𝙊𝙓 :: 〆 :: 𝘽𝙃𝘼𝙄☬☆ )\n"
         f"👁 <b>AUTO-VIEWS</b>: {views_status}"
+        "😈 नॉक्स भाई और उनके दोस्त को चोर के साबकी माकी Chu**🖕😂"
     )
 
 def get_main_keyboard():
@@ -287,7 +288,7 @@ def get_back_button():
 async def start_handler(client, message):
     user_id = message.from_user.id
     if user_id not in ADMIN_IDS:
-        await message.reply_text("⛔ **Access Denied:** Aapke paas access nahi hai.")
+        await message.reply_text("⛔ **Access Denied:** \n Kya Yrr😆 Admin Nhi Hai tu😝 .")
         return
 
     await message.reply_text(
