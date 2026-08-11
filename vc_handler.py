@@ -1,9 +1,9 @@
 import asyncio
 from pyrogram import Client
-from pyrogram.raw.functions.phone import JoinGroupCall
+from pyrogram.raw.functions.phone import JoinGroupCall, LeaveGroupCall
 from pyrogram.raw.functions.channels import GetFullChannel
 
-# इन क्लाइंट्स को सेव रखेंगे ताकि ये VC से बाहर न निकलें
+# VC में एक्टिव अकाउंट्स को होल्ड करने के लिए लिस्ट
 active_vc_clients = []
 
 async def join_vc(chat_id, sessions, api_id, api_hash):
@@ -13,17 +13,15 @@ async def join_vc(chat_id, sessions, api_id, api_hash):
     
     for idx, session in enumerate(sessions):
         try:
-            # नया क्लाइंट बनाएँ
-            acc = Client(f"vc_client_{idx}", api_id=api_id, api_hash=api_hash, session_string=session, in_memory=True)
+            acc = Client(f"vc_acc_{idx}", api_id=api_id, api_hash=api_hash, session_string=session, in_memory=True)
             await acc.connect()
             
-            # पहले चैट जॉइन करें (अगर पहले से नहीं है)
+            # चैट जॉइन (अगर पहले से नहीं है)
             try:
                 await acc.join_chat(chat_id)
             except Exception:
                 pass 
             
-            # VC में घुसने का प्रोसेस
             peer = await acc.resolve_peer(chat_id)
             full_chat = await acc.invoke(GetFullChannel(channel=peer))
             
@@ -33,7 +31,7 @@ async def join_vc(chat_id, sessions, api_id, api_hash):
                     join_as=peer,
                     muted=True
                 ))
-                active_vc_clients.append(acc) # अकाउंट को एक्टिव रखें!
+                active_vc_clients.append(acc) # अकाउंट कनेक्टेड रहेगा
                 success += 1
             else:
                 await acc.disconnect()
@@ -52,8 +50,7 @@ async def leave_all_vcs():
         try:
             await acc.disconnect()
             count += 1
-        except:
+        except Exception:
             pass
     active_vc_clients.clear()
     return count
-
