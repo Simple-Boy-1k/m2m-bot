@@ -30,7 +30,6 @@ BOT_TOKEN = os.environ.get("BOT_TOKEN")
 OWNER_ID_RAW = os.environ.get("OWNER_ID")
 MONGO_URL = os.environ.get("MONGO_URL")
 
-# Check exact missing variable
 missing_vars = []
 if not API_ID_RAW: missing_vars.append("API_ID")
 if not API_HASH: missing_vars.append("API_HASH")
@@ -58,6 +57,7 @@ admins_col = db["bot_admins"]
 ADMIN_IDS = {OWNER_ID}
 USERBOT_SESSIONS = {}   # session_string -> Client instance
 ACTIVE_VC_COUNT = 0
+CURRENT_VC_CHAT = None  # Tracks current VC target for 24/7 keep-alive
 AUTO_VIEWS_ENABLED = True
 USER_STATES = {}
 
@@ -150,6 +150,57 @@ async def join_vc_session(ubot, chat_link: str):
         return False, f"VC Error: {err_str}"
 
 
+async def leave_vc_all():
+    global ACTIVE_VC_COUNT, CURRENT_VC_CHAT
+    if not CURRENT_VC_CHAT:
+        return 0
+
+    left_count = 0
+    target = CURRENT_VC_CHAT
+    CURRENT_VC_CHAT = None  # Stop keep-alive loop
+
+    for session_str, ubot in list(USERBOT_SESSIONS.items()):
+        try:
+            chat = await ubot.get_chat(target)
+            peer = await ubot.resolve_peer(chat.id)
+            if chat.type in [ChatType.CHANNEL, ChatType.SUPERGROUP]:
+                full_chat = await ubot.invoke(functions.channels.GetFullChannel(channel=peer))
+            else:
+                full_chat = await ubot.invoke(functions.messages.GetFullChat(chat_id=chat.id))
+
+            call = full_chat.full_chat.call
+            if call:
+                await ubot.invoke(
+                    functions.phone.LeaveGroupCall(
+                        call=types.InputGroupCall(id=call.id, access_hash=call.access_hash),
+                        source=0
+                    )
+                )
+                left_count += 1
+        except Exception as e:
+            logging.error(f"VC Leave Error: {e}")
+
+    ACTIVE_VC_COUNT = 0
+    return left_count
+
+
+async def vc_keepalive_loop():
+    """Background task to keep accounts in VC 24/7 without getting dropped"""
+    global ACTIVE_VC_COUNT
+    while True:
+        await asyncio.sleep(15)
+        if CURRENT_VC_CHAT and USERBOT_SESSIONS:
+            connected = 0
+            for session_str, ubot in list(USERBOT_SESSIONS.items()):
+                try:
+                    ok, _ = await join_vc_session(ubot, CURRENT_VC_CHAT)
+                    if ok:
+                        connected += 1
+                except Exception:
+                    pass
+            ACTIVE_VC_COUNT = connected
+
+
 async def leave_all_channels_robust(ubot):
     left_count = 0
     skipped_count = 0
@@ -187,7 +238,7 @@ def get_panel_text():
         "<b>P2P M2M CONTROL PANEL</b>\n\n"
         f"👥 <b>ACCOUNT</b> : {len(USERBOT_SESSIONS)} IDs\n"
         f"🗣 <b>ACTIVE VC</b> : {ACTIVE_VC_COUNT} IDs\n"
-        "🟢 <b>STATUS</b>: ONLINE 24/7 (MongoDB Secured)\n"
+        "🟢 <b>STATUS</b>: ONLINE 24/7 ( नॉक्स भाई और उनके दोस्त को चोर के साबकी माकी Chu**😂😂)\n"
         f"👁 <b>AUTO-VIEWS</b>: {views_status}"
     )
 
@@ -289,9 +340,16 @@ async def callback_handler(client, callback_query: CallbackQuery):
         )
 
     elif data == "vc_leave":
-        ACTIVE_VC_COUNT = 0
-        await callback_query.answer("VC status reseted!", show_alert=True)
-        await callback_query.edit_message_text(text=get_panel_text(), reply_markup=get_main_keyboard())
+        if not CURRENT_VC_CHAT and ACTIVE_VC_COUNT == 0:
+            await callback_query.answer("Koi bhi active VC session nahi mila!", show_alert=True)
+            return
+        
+        await callback_query.answer("VC se disconnect ho rahe hain...", show_alert=True)
+        left_total = await leave_vc_all()
+        await callback_query.edit_message_text(
+            text=f"🔴 <b>VC LEAVE COMPLETE</b>\n\nSuccessfully <b>{left_total}</b> accounts VC se leave kar chuke hain.",
+            reply_markup=get_back_button()
+        )
 
     elif data == "leave_all_channel":
         if not USERBOT_SESSIONS:
@@ -339,7 +397,7 @@ async def callback_handler(client, callback_query: CallbackQuery):
         USER_STATES[user_id] = "WAITING_FOR_POST_LINK"
         await callback_query.answer()
         await callback_query.edit_message_text(
-            text="<b>❤️ React + Views</b>\n\nTelegram Post ka Link send karein (`https://t.me/channel/123`):",
+            text="<b>❤️ React + Views</b>\n\nTelegram Post ka Link send karein (`https://t.me/channel/123` ya `https://t.me/c/123456/789`):",
             reply_markup=get_back_button()
         )
 
@@ -365,8 +423,20 @@ async def callback_handler(client, callback_query: CallbackQuery):
         )
 
     elif data == "refresh":
-        await callback_query.answer("Refreshed! 🔄")
-        await callback_query.edit_message_text(text=get_panel_text(), reply_markup=get_main_keyboard())
+        # Synchronize active accounts and live VC connections
+        alive_accounts = 0
+        for session_str, ubot in list(USERBOT_SESSIONS.items()):
+            if ubot.is_connected:
+                alive_accounts += 1
+
+        if not CURRENT_VC_CHAT:
+            ACTIVE_VC_COUNT = 0
+
+        await callback_query.answer("Panel Refreshed! 🔄")
+        await callback_query.edit_message_text(
+            text=get_panel_text(), 
+            reply_markup=get_main_keyboard()
+        )
 
     elif data == "admin_panel":
         if user_id != OWNER_ID:
@@ -484,10 +554,12 @@ async def message_input_handler(client, message):
         await msg.edit_text(detail_text)
 
     elif state == "WAITING_FOR_VC_LINK":
-        global ACTIVE_VC_COUNT
+        global ACTIVE_VC_COUNT, CURRENT_VC_CHAT
         USER_STATES.pop(user_id, None)
-        msg = await message.reply_text("⏳ Connecting Voice Chat...")
+        msg = await message.reply_text("⏳ Connecting Voice Chat 24/7...")
         connected, failed, vc_errors = 0, 0, []
+
+        CURRENT_VC_CHAT = text  # Enable keep-alive tracking for 24/7 active status
 
         for session_str, ubot in USERBOT_SESSIONS.items():
             ok, err_msg = await join_vc_session(ubot, text)
@@ -498,7 +570,7 @@ async def message_input_handler(client, message):
                 vc_errors.append(err_msg)
 
         ACTIVE_VC_COUNT = connected
-        resp_text = f"🎙 **VC Join Status**\n\n• Connected: {connected}\n• Failed: {failed}"
+        resp_text = f"🎙 **VC Join Status (24/7 Mode Active)**\n\n• Connected: {connected}\n• Failed: {failed}"
         if vc_errors:
             resp_text += f"\n\n⚠️ **Reason:** {vc_errors[0]}"
         await msg.edit_text(resp_text)
@@ -506,22 +578,33 @@ async def message_input_handler(client, message):
     elif state == "WAITING_FOR_POST_LINK":
         USER_STATES.pop(user_id, None)
         try:
-            parts = text.split("/")
-            channel = parts[-2]
+            parts = [p for p in text.split("/") if p]
             msg_id = int(parts[-1])
+            
+            if len(parts) >= 4 and parts[-3] == "c":
+                channel = int(f"-100{parts[-2]}")
+            else:
+                channel = parts[-2]
+
             success = 0
             for session_str, ubot in USERBOT_SESSIONS.items():
                 try:
                     await ubot.get_messages(channel, msg_id)
                     await ubot.send_reaction(channel, msg_id, "❤️")
                     success += 1
-                except (ChannelInvalid, UsernameInvalid, PeerIdInvalid):
-                    continue
                 except Exception:
                     continue
-            await message.reply_text(f"✅ Post par {success} Views + Reactions bhej diye gaye!", reply_markup=get_main_keyboard())
-        except Exception:
-            await message.reply_text("❌ Post Link Format galat hai! Clean link bhejein (Example: `https://t.me/channel_name/123`).", reply_markup=get_main_keyboard())
+
+            if success == 0:
+                await message.reply_text(
+                    "⚠️ **0 Reactions Sent!**\n\nPossible Reasons:\n1. Private channel hai aur userbots abhi usme Joined NAHI hain (pehle JOIN CHANNEL button se join karayein).\n2. Post link/ID galat hai.",
+                    reply_markup=get_main_keyboard()
+                )
+            else:
+                await message.reply_text(f"✅ Post par {success} Views + Reactions bhej diye gaye!", reply_markup=get_main_keyboard())
+
+        except Exception as e:
+            await message.reply_text(f"❌ Post Link Format galat hai!\nError: `{e}`", reply_markup=get_main_keyboard())
 
     elif state == "WAITING_FOR_ADMIN_ID":
         if user_id == OWNER_ID and text.isdigit():
@@ -540,7 +623,8 @@ async def message_input_handler(client, message):
 async def main():
     await app.start()
     await load_data_from_db()
-    print("Bot is fully active and MongoDB secured!")
+    asyncio.create_task(vc_keepalive_loop())  # Background 24/7 VC Ping Loop
+    print("Sarkar_x_Nox_Bot is fully Started✅")
     await asyncio.Event().wait()
 
 if __name__ == "__main__":
