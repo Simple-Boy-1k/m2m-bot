@@ -3,7 +3,7 @@ import logging
 import asyncio
 import random
 import motor.motor_asyncio
-from pyrogram import Client, filters, enums
+from pyrogram import Client, filters
 from pyrogram.enums import ChatType
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery, WebAppInfo
 from pyrogram.errors import (
@@ -33,11 +33,8 @@ MONGO_URL = os.environ.get("MONGO_URL")
 # Dynamic Button Colour Config (Music Bot style toggle compatibility)
 BUTTON_COLOUR = os.environ.get("BUTTON_COLOUR", "True").lower() in ("true", "1", "t")
 
-STYLES = [
-    enums.ButtonStyle.PRIMARY,
-    enums.ButtonStyle.SUCCESS,
-    enums.ButtonStyle.DANGER
-]
+# Safe fallback for button styles if enums are missing in pyrogram
+STYLES = ["primary", "success", "danger"]
 
 missing_vars = []
 if not API_ID_RAW: missing_vars.append("API_ID")
