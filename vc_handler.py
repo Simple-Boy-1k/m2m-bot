@@ -2,7 +2,7 @@ import json
 import asyncio
 import random
 from pyrogram import Client
-from pyrogram.raw.functions.phone import JoinGroupCall, GetGroupCall
+from pyrogram.raw.functions.phone import JoinGroupCall, GetGroupCall, LeaveGroupCall
 from pyrogram.raw.functions.channels import GetFullChannel
 from pyrogram.raw.types import DataJSON, InputGroupCall
 from vc_utils import resolve_chat_entity
@@ -10,15 +10,22 @@ from database import get_all_sessions, delete_session
 
 ACTIVE_SESSIONS = {}
 
-async def vc_keep_alive(acc: Client, input_call: InputGroupCall):
+# 🛠️ AUTO-LEAVE FIX: VC Ping Heartbeat Task (Keeps connections alive forever)
+async def vc_keep_alive(acc: Client, input_call: InputGroupCall, session_idx: int):
     while True:
         try:
-            await asyncio.sleep(15)
+            await asyncio.sleep(10)
+            if not acc.is_connected:
+                try:
+                    await acc.connect()
+                except Exception:
+                    pass
             await acc.invoke(GetGroupCall(call=input_call, limit=1))
         except asyncio.CancelledError:
             break
-        except Exception:
-            break
+        except Exception as e:
+            print(f"VC Keepalive Ping Error (Session {session_idx}): {e}")
+            await asyncio.sleep(5)
 
 async def join_vc(chat_input, api_id, api_hash):
     global ACTIVE_SESSIONS
@@ -78,20 +85,21 @@ async def join_vc(chat_input, api_id, api_hash):
 
             await acc.invoke(JoinGroupCall(call=input_call, join_as=self_peer, params=webrtc_params, muted=True))
 
-            task = asyncio.create_task(vc_keep_alive(acc, input_call))
+            task = asyncio.create_task(vc_keep_alive(acc, input_call, idx))
             
             ACTIVE_SESSIONS[idx] = {
                 "client": acc,
-                "task": task
+                "task": task,
+                "input_call": input_call
             }
 
             success += 1
 
         except Exception as e:
-            print(f"Join error (ID {idx}): {e}")
+            print(f"Join VC error (ID {idx}): {e}")
             if acc:
                 try: await acc.disconnect()
-                except: pass
+                except Exception: pass
             failed += 1
 
     return success, failed, "OK"
@@ -102,7 +110,14 @@ async def leave_all_vcs():
     for idx, item in list(ACTIVE_SESSIONS.items()):
         try:
             item["task"].cancel()
-            await item["client"].disconnect()
+            acc = item["client"]
+            input_call = item.get("input_call")
+            if acc and acc.is_connected and input_call:
+                try:
+                    await acc.invoke(LeaveGroupCall(call=input_call, source=0))
+                except Exception:
+                    pass
+                await acc.disconnect()
             count += 1
         except Exception:
             pass
@@ -112,7 +127,7 @@ async def leave_all_vcs():
 def get_active_count():
     return len(ACTIVE_SESSIONS)
 
-# 🚀 JOIN CHANNEL
+# 🚀 JOIN CHANNEL / GROUP
 async def join_channel_all(chat_input, api_id, api_hash):
     sessions = await get_all_sessions()
     success, failed = 0, 0
@@ -143,7 +158,7 @@ async def leave_all_channels_all(api_id, api_hash):
             pass
     return success
 
-# 🔔 PURGE DEAD
+# 🔔 PURGE DEAD SESSIONS
 async def purge_dead_sessions(api_id, api_hash):
     sessions = await get_all_sessions()
     removed = 0
@@ -155,6 +170,25 @@ async def purge_dead_sessions(api_id, api_hash):
             await delete_session(session)
             removed += 1
     return removed
+
+# ♻️ RECYCLE ACCOUNTS (Reload & Test All Sessions)
+async def recycle_accounts_all(api_id, api_hash):
+    sessions = await get_all_sessions()
+    recycled = 0
+    dead = 0
+    for idx, session in enumerate(sessions):
+        try:
+            async with Client(f"recycle_{idx}", api_id=api_id, api_hash=api_hash, session_string=session, in_memory=True) as acc:
+                user = await acc.get_me()
+                if user:
+                    recycled += 1
+                else:
+                    await delete_session(session)
+                    dead += 1
+        except Exception:
+            await delete_session(session)
+            dead += 1
+    return recycled, dead
 
 # ❤️ REACT + VIEWS
 async def react_and_views_post(post_link, emoji, api_id, api_hash):
