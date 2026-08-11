@@ -238,9 +238,9 @@ def get_panel_text():
         "<b>P2P M2M CONTROL PANEL</b>\n\n"
         f"👥 <b>ACCOUNT</b> : {len(USERBOT_SESSIONS)} IDs\n"
         f"🗣 <b>ACTIVE VC</b> : {ACTIVE_VC_COUNT} IDs\n"
-        "🟢 <b>STATUS</b>: ONLINE 24/7 ( ☆☬𝙎𝘼𝙍𝙆𝘼𝙍 :メ: 𝙉𝙊𝙓 ☬☆ )\n"
+        "🟢 <b>STATUS</b>: ONLINE 24/7 (☆𝙎𝘼𝙍𝙆𝘼𝙍 メ 𝙉𝙊𝙓☆)\n"
         f"👁 <b>AUTO-VIEWS</b>: {views_status}\n"
-        "😈 नॉक्स भाई और उनके दोस्त को चोर के साबकी माकी Chu**🖕😂"
+        "नॉक्स भाई और उनके दोस्त को चोर के साबकी माकी Chu*😂"
     )
 
 def get_main_keyboard():
