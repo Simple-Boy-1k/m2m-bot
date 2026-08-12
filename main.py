@@ -323,9 +323,20 @@ async def callback_handler(client, callback_query: CallbackQuery):
     if data == "add_account":
         USER_STATES[user_id] = "WAITING_FOR_SESSION"
         await callback_query.answer()
+        add_acc_keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("⚡ Session Generator Bot", url="https://t.me/Sarkarstring_sessionebot")],
+            [InlineKeyboardButton("🔙 Back to Main Menu", callback_data="back_to_main")]
+        ])
         await callback_query.edit_message_text(
-            text="<b>➕ Add Account</b>\n\nApna Pyrogram String Session yahan send karein:",
-            reply_markup=get_back_button()
+            text=(
+                "<b>➕ Add Account</b>\n\n"
+                "📌 <b>String Session Kaise Nikalein:</b>\n"
+                "1️⃣ Pehle @Sarkarstring_sessionebot par jayein.\n"
+                "2️⃣ Bot me <code>/start</code> dabayein aur <b>Pyrogram</b> select karein.\n"
+                "3️⃣ Apna Number, OTP aur 2FA Password daal kar Session String nikalein.\n\n"
+                "👉 Us <b>Pyrogram String Session Code</b> ko yahan send karein:"
+            ),
+            reply_markup=add_acc_keyboard
         )
 
     elif data == "join_channel":
@@ -641,4 +652,3 @@ async def main():
 if __name__ == "__main__":
     loop = asyncio.get_event_loop()
     loop.run_until_complete(main())
-    
