@@ -305,9 +305,11 @@ def get_panel_text():
     )
 
 
-def get_main_keyboard():
+def get_main_keyboard(user_id=None):
     enabled = BUTTON_COLOUR
-    return InlineKeyboardMarkup([
+    is_owner = (user_id == OWNER_ID)
+
+    keyboard = [
         [
             create_safe_button("➕ ADD ACCOUNT", "add_account", enabled),
             create_safe_button("🚀 JOIN CHANNEL", "join_channel", enabled),
@@ -315,25 +317,41 @@ def get_main_keyboard():
         [
             create_safe_button("🎙 VC JOINER", "vc_joiner", enabled),
             create_safe_button("🔴 VC LEAVE", "vc_leave", enabled),
-        ],
-        [
-            create_safe_button(
-                "🚪 LEAVE ALL CHANNEL", "leave_all_channel", enabled
-            ),
+        ]
+    ]
+
+    # LEAVE ALL CHANNEL button sirf Owner ko dikhega
+    if is_owner:
+        keyboard.append([
+            create_safe_button("🚪 LEAVE ALL CHANNEL", "leave_all_channel", enabled),
             create_safe_button("🔔 PURGE DEAD", "purge_dead", enabled),
-        ],
-        [
-            create_safe_button("❤️ REACT + VIEWS", "react_views", enabled),
-            create_safe_button("👁 VIEWS TOGGLE", "views_toggle", enabled),
-        ],
-        [
-            create_safe_button(
-                "♻️ RECYCLE ACCOUNTS", "recycle_accounts", enabled
-            ),
-            create_safe_button("🔐 ADMIN PANEL", "admin_panel", enabled),
-        ],
-        [create_safe_button("🔄 REFRESH", "refresh", enabled)],
+        ])
+    else:
+        keyboard.append([
+            create_safe_button("🔔 PURGE DEAD", "purge_dead", enabled),
+        ])
+
+    keyboard.append([
+        create_safe_button("❤️ REACT + VIEWS", "react_views", enabled),
+        create_safe_button("👁 VIEWS TOGGLE", "views_toggle", enabled),
     ])
+
+    # RECYCLE ACCOUNTS button sirf Owner ko dikhega
+    if is_owner:
+        keyboard.append([
+            create_safe_button("♻️ RECYCLE ACCOUNTS", "recycle_accounts", enabled),
+            create_safe_button("🔐 ADMIN PANEL", "admin_panel", enabled),
+        ])
+    else:
+        keyboard.append([
+            create_safe_button("🔐 ADMIN PANEL", "admin_panel", enabled),
+        ])
+
+    keyboard.append([
+        create_safe_button("🔄 REFRESH", "refresh", enabled)
+    ])
+
+    return InlineKeyboardMarkup(keyboard)
 
 
 def get_admin_menu_keyboard():
@@ -378,7 +396,7 @@ async def start_handler(client, message):
         return
 
     await message.reply_text(
-        text=get_panel_text(), reply_markup=get_main_keyboard()
+        text=get_panel_text(), reply_markup=get_main_keyboard(user_id)
     )
 
 
@@ -434,25 +452,42 @@ async def callback_handler(client, callback_query: CallbackQuery):
             return
         await callback_query.answer()
 
-        # STEP 1: CHOOSE TOTAL REQUESTS
+        total_accounts = len(USERBOT_SESSIONS)
+
+        # STEP 1: GRANULAR REQUEST SELECTION
         rq_keyboard = InlineKeyboardMarkup([
             [
-                InlineKeyboardButton("⚡ 1 Rq", callback_data="rqsel_1"),
-                InlineKeyboardButton("⚡ 2 Rq", callback_data="rqsel_2"),
-                InlineKeyboardButton("⚡ 3 Rq", callback_data="rqsel_3"),
+                InlineKeyboardButton("1 Rq", callback_data="rqsel_1"),
+                InlineKeyboardButton("2 Rq", callback_data="rqsel_2"),
+                InlineKeyboardButton("3 Rq", callback_data="rqsel_3"),
+                InlineKeyboardButton("4 Rq", callback_data="rqsel_4"),
+                InlineKeyboardButton("5 Rq", callback_data="rqsel_5"),
             ],
             [
-                InlineKeyboardButton("⚡ 5 Rq", callback_data="rqsel_5"),
-                InlineKeyboardButton("⚡ 10 Rq", callback_data="rqsel_10"),
-                InlineKeyboardButton("⚡ 15 Rq", callback_data="rqsel_15"),
+                InlineKeyboardButton("6 Rq", callback_data="rqsel_6"),
+                InlineKeyboardButton("7 Rq", callback_data="rqsel_7"),
+                InlineKeyboardButton("8 Rq", callback_data="rqsel_8"),
+                InlineKeyboardButton("9 Rq", callback_data="rqsel_9"),
+                InlineKeyboardButton("10 Rq", callback_data="rqsel_10"),
             ],
             [
-                InlineKeyboardButton("⚡ 20 Rq", callback_data="rqsel_20"),
-                InlineKeyboardButton("⚡ 30 Rq", callback_data="rqsel_30"),
-                InlineKeyboardButton("⚡ 50 Rq", callback_data="rqsel_50"),
+                InlineKeyboardButton("12 Rq", callback_data="rqsel_12"),
+                InlineKeyboardButton("15 Rq", callback_data="rqsel_15"),
+                InlineKeyboardButton("20 Rq", callback_data="rqsel_20"),
+                InlineKeyboardButton("25 Rq", callback_data="rqsel_25"),
+                InlineKeyboardButton("30 Rq", callback_data="rqsel_30"),
             ],
             [
-                InlineKeyboardButton("⚡ 100 Rq", callback_data="rqsel_100"),
+                InlineKeyboardButton("40 Rq", callback_data="rqsel_40"),
+                InlineKeyboardButton("50 Rq", callback_data="rqsel_50"),
+                InlineKeyboardButton("75 Rq", callback_data="rqsel_75"),
+                InlineKeyboardButton("100 Rq", callback_data="rqsel_100"),
+            ],
+            [
+                InlineKeyboardButton(
+                    f"⚡ ALL ACCOUNTS ({total_accounts} Rq)",
+                    callback_data=f"rqsel_{total_accounts}",
+                )
             ],
             [
                 InlineKeyboardButton(
@@ -463,9 +498,9 @@ async def callback_handler(client, callback_query: CallbackQuery):
         await callback_query.edit_message_text(
             text=(
                 "🚀 <b>Join Channel / Group</b>\n\n"
-                f"📊 <b>Total Active Accounts:</b> <code>{len(USERBOT_SESSIONS)}</code>\n\n"
+                f"📊 <b>Total Active Accounts:</b> <code>{total_accounts}</code>\n\n"
                 "1️⃣ <b>Step 1: Total Kitni Requests Bhejni Hain?</b>\n"
-                "Niche se number of requests select karein:"
+                "Jitne accounts use karne hain select karein:"
             ),
             reply_markup=rq_keyboard,
         )
@@ -522,7 +557,6 @@ async def callback_handler(client, callback_query: CallbackQuery):
         rq_count = int(parts[1])
         delay_sec = float(parts[2])
 
-        # Formatting text for clear visibility
         if delay_sec >= 3600:
             delay_str = f"{int(delay_sec / 3600)} Hour(s)"
         elif delay_sec >= 60:
@@ -585,6 +619,13 @@ async def callback_handler(client, callback_query: CallbackQuery):
         )
 
     elif data == "leave_all_channel":
+        if user_id != OWNER_ID:
+            await callback_query.answer(
+                "⛔ Sirf Main Owner hi sabhi channels leave karwa sakta hai!",
+                show_alert=True,
+            )
+            return
+
         if not USERBOT_SESSIONS:
             await callback_query.answer(
                 "Koi active account nahi hai!", show_alert=True
@@ -655,10 +696,17 @@ async def callback_handler(client, callback_query: CallbackQuery):
         status_msg = "ENABLED ✅" if AUTO_VIEWS_ENABLED else "DISABLED ❌"
         await callback_query.answer(f"Auto-Views: {status_msg}", show_alert=True)
         await callback_query.edit_message_text(
-            text=get_panel_text(), reply_markup=get_main_keyboard()
+            text=get_panel_text(), reply_markup=get_main_keyboard(user_id)
         )
 
     elif data == "recycle_accounts":
+        if user_id != OWNER_ID:
+            await callback_query.answer(
+                "⛔ Sirf Main Owner hi accounts recycle kar sakta hai!",
+                show_alert=True,
+            )
+            return
+
         await callback_query.answer("Recycling all accounts...", show_alert=True)
         recycled = 0
         for session_str, ubot in list(USERBOT_SESSIONS.items()):
@@ -684,7 +732,7 @@ async def callback_handler(client, callback_query: CallbackQuery):
 
         await callback_query.answer("Panel Refreshed! 🔄")
         await callback_query.edit_message_text(
-            text=get_panel_text(), reply_markup=get_main_keyboard()
+            text=get_panel_text(), reply_markup=get_main_keyboard(user_id)
         )
 
     elif data == "admin_panel":
@@ -775,7 +823,7 @@ async def callback_handler(client, callback_query: CallbackQuery):
     elif data == "back_to_main":
         USER_STATES.pop(user_id, None)
         await callback_query.edit_message_text(
-            text=get_panel_text(), reply_markup=get_main_keyboard()
+            text=get_panel_text(), reply_markup=get_main_keyboard(user_id)
         )
 
 
@@ -816,7 +864,7 @@ async def message_input_handler(client, message):
             await message.reply_text(
                 "✅ **Account Saved to MongoDB!**\n\n• Name:"
                 f" {me.first_name}\n• ID: <code>{me.id}</code>",
-                reply_markup=get_main_keyboard(),
+                reply_markup=get_main_keyboard(user_id),
             )
         except Exception as e:
             await message.reply_text(
@@ -838,7 +886,7 @@ async def message_input_handler(client, message):
                 f"Aapke paas sirf **{total_available}** active accounts hain!\n"
                 f"Aapne **{rq_count} Rq** select kiya tha.\n\n"
                 f"👉 Pehle aur accounts add karein ya kam Rq select karein.",
-                reply_markup=get_main_keyboard(),
+                reply_markup=get_main_keyboard(user_id),
             )
             return
 
@@ -923,18 +971,18 @@ async def message_input_handler(client, message):
                 await message.reply_text(
                     "⚠️ **0 Reactions Sent!**\n\nPossible Reasons:\n1. Private channel"
                     " hai aur userbots abhi usme Joined NAHI hain.\n2. Post link/ID galat hai.",
-                    reply_markup=get_main_keyboard(),
+                    reply_markup=get_main_keyboard(user_id),
                 )
             else:
                 await message.reply_text(
                     f"✅ Post par {success} Views + Reactions bhej diye gaye!",
-                    reply_markup=get_main_keyboard(),
+                    reply_markup=get_main_keyboard(user_id),
                 )
 
         except Exception as e:
             await message.reply_text(
                 f"❌ Post Link Format galat hai!\nError: `{e}`",
-                reply_markup=get_main_keyboard(),
+                reply_markup=get_main_keyboard(user_id),
             )
 
     elif state_type == "WAITING_FOR_ADMIN_ID":
