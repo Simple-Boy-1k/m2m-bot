@@ -434,35 +434,25 @@ async def callback_handler(client, callback_query: CallbackQuery):
             return
         await callback_query.answer()
 
-        time_category_keyboard = InlineKeyboardMarkup([
+        # STEP 1: CHOOSE TOTAL REQUESTS
+        rq_keyboard = InlineKeyboardMarkup([
             [
-                InlineKeyboardButton(
-                    "⏱️ 1 Min Menu", callback_data="spcat_1m"
-                ),
-                InlineKeyboardButton(
-                    "⏱️ 2 Min Menu", callback_data="spcat_2m"
-                ),
+                InlineKeyboardButton("⚡ 1 Rq", callback_data="rqsel_1"),
+                InlineKeyboardButton("⚡ 2 Rq", callback_data="rqsel_2"),
+                InlineKeyboardButton("⚡ 3 Rq", callback_data="rqsel_3"),
             ],
             [
-                InlineKeyboardButton(
-                    "⏱️ 5 Min Menu", callback_data="spcat_5m"
-                ),
-                InlineKeyboardButton(
-                    "⏱️ 1 Hour Menu", callback_data="spcat_1h"
-                ),
+                InlineKeyboardButton("⚡ 5 Rq", callback_data="rqsel_5"),
+                InlineKeyboardButton("⚡ 10 Rq", callback_data="rqsel_10"),
+                InlineKeyboardButton("⚡ 15 Rq", callback_data="rqsel_15"),
             ],
             [
-                InlineKeyboardButton(
-                    "⏱️ 2 Hours Menu", callback_data="spcat_2h"
-                ),
-                InlineKeyboardButton(
-                    "⏱️ 3 Hours Menu", callback_data="spcat_3h"
-                ),
+                InlineKeyboardButton("⚡ 20 Rq", callback_data="rqsel_20"),
+                InlineKeyboardButton("⚡ 30 Rq", callback_data="rqsel_30"),
+                InlineKeyboardButton("⚡ 50 Rq", callback_data="rqsel_50"),
             ],
             [
-                InlineKeyboardButton(
-                    "⏱️ 4 Hours Menu", callback_data="spcat_4h"
-                ),
+                InlineKeyboardButton("⚡ 100 Rq", callback_data="rqsel_100"),
             ],
             [
                 InlineKeyboardButton(
@@ -474,169 +464,85 @@ async def callback_handler(client, callback_query: CallbackQuery):
             text=(
                 "🚀 <b>Join Channel / Group</b>\n\n"
                 f"📊 <b>Total Active Accounts:</b> <code>{len(USERBOT_SESSIONS)}</code>\n\n"
-                "⏱️ <b>Time Category Choose Karein:</b>\n"
-                "Aap kitne time span me request set karna chahte hain?"
+                "1️⃣ <b>Step 1: Total Kitni Requests Bhejni Hain?</b>\n"
+                "Niche se number of requests select karein:"
             ),
-            reply_markup=time_category_keyboard,
+            reply_markup=rq_keyboard,
         )
 
-    elif data == "spcat_1m":
-        keyboard = InlineKeyboardMarkup([
-            [
-                InlineKeyboardButton("⚡ 1 Rq", callback_data="spset_60_1_1 Rq / 1 Min"),
-                InlineKeyboardButton("⚡ 2 Rq", callback_data="spset_60_2_2 Rq / 1 Min"),
-                InlineKeyboardButton("⚡ 3 Rq", callback_data="spset_60_3_3 Rq / 1 Min"),
-            ],
-            [
-                InlineKeyboardButton("⚡ 5 Rq", callback_data="spset_60_5_5 Rq / 1 Min"),
-                InlineKeyboardButton("⚡ 10 Rq", callback_data="spset_60_10_10 Rq / 1 Min"),
-                InlineKeyboardButton("⚡ 15 Rq", callback_data="spset_60_15_15 Rq / 1 Min"),
-            ],
-            [
-                InlineKeyboardButton("⚡ 20 Rq", callback_data="spset_60_20_20 Rq / 1 Min"),
-                InlineKeyboardButton("⚡ 30 Rq", callback_data="spset_60_30_30 Rq / 1 Min"),
-            ],
-            [InlineKeyboardButton("🔙 Back to Time Menu", callback_data="join_channel")],
-        ])
+    elif data.startswith("rqsel_"):
+        rq_count = int(data.split("_")[1])
         await callback_query.answer()
-        await callback_query.edit_message_text(
-            text="⚡ <b>1 Minute Options:</b>\n\nExact kitne accounts join karwane hain?",
-            reply_markup=keyboard,
-        )
 
-    elif data == "spcat_2m":
-        keyboard = InlineKeyboardMarkup([
+        # STEP 2: SECONDS / MINUTES / HOURS GAP SELECTION
+        delay_keyboard = InlineKeyboardMarkup([
+            # SECONDS BUTTONS
             [
-                InlineKeyboardButton("⚙️ 1 Rq", callback_data="spset_120_1_1 Rq / 2 Min"),
-                InlineKeyboardButton("⚙️ 2 Rq", callback_data="spset_120_2_2 Rq / 2 Min"),
-                InlineKeyboardButton("⚙️ 3 Rq", callback_data="spset_120_3_3 Rq / 2 Min"),
+                InlineKeyboardButton("⚡ 1 Sec", callback_data=f"delsel_{rq_count}_1"),
+                InlineKeyboardButton("⚡ 2 Sec", callback_data=f"delsel_{rq_count}_2"),
+                InlineKeyboardButton("⚡ 3 Sec", callback_data=f"delsel_{rq_count}_3"),
+                InlineKeyboardButton("⚡ 5 Sec", callback_data=f"delsel_{rq_count}_5"),
             ],
             [
-                InlineKeyboardButton("⚙️ 5 Rq", callback_data="spset_120_5_5 Rq / 2 Min"),
-                InlineKeyboardButton("⚙️ 10 Rq", callback_data="spset_120_10_10 Rq / 2 Min"),
+                InlineKeyboardButton("⚡ 10 Sec", callback_data=f"delsel_{rq_count}_10"),
+                InlineKeyboardButton("⚡ 15 Sec", callback_data=f"delsel_{rq_count}_15"),
+                InlineKeyboardButton("⚡ 30 Sec", callback_data=f"delsel_{rq_count}_30"),
+                InlineKeyboardButton("⚡ 45 Sec", callback_data=f"delsel_{rq_count}_45"),
             ],
-            [InlineKeyboardButton("🔙 Back to Time Menu", callback_data="join_channel")],
+            # MINUTES BUTTONS
+            [
+                InlineKeyboardButton("⏱️ 1 Min", callback_data=f"delsel_{rq_count}_60"),
+                InlineKeyboardButton("⏱️ 2 Min", callback_data=f"delsel_{rq_count}_120"),
+                InlineKeyboardButton("⏱️ 5 Min", callback_data=f"delsel_{rq_count}_300"),
+            ],
+            [
+                InlineKeyboardButton("⏱️ 10 Min", callback_data=f"delsel_{rq_count}_600"),
+                InlineKeyboardButton("⏱️ 15 Min", callback_data=f"delsel_{rq_count}_900"),
+                InlineKeyboardButton("⏱️ 30 Min", callback_data=f"delsel_{rq_count}_1800"),
+            ],
+            # HOURS BUTTONS
+            [
+                InlineKeyboardButton("⏳ 1 Hour", callback_data=f"delsel_{rq_count}_3600"),
+                InlineKeyboardButton("⏳ 2 Hours", callback_data=f"delsel_{rq_count}_7200"),
+                InlineKeyboardButton("⏳ 3 Hours", callback_data=f"delsel_{rq_count}_10800"),
+            ],
+            [InlineKeyboardButton("🔙 Back to Rq Menu", callback_data="join_channel")],
         ])
-        await callback_query.answer()
         await callback_query.edit_message_text(
-            text="⚙️ <b>2 Minutes Options:</b>\n\nKitni requests bhejni hain?",
-            reply_markup=keyboard,
+            text=(
+                f"📌 <b>Selected Requests:</b> <code>{rq_count} Rq</code>\n\n"
+                "2️⃣ <b>Step 2: Har Member Ke Beech Kitna Delay/Gap Chahiye?</b>\n"
+                "Seconds, Minutes ya Hours me se delay select karein:"
+            ),
+            reply_markup=delay_keyboard,
         )
 
-    elif data == "spcat_5m":
-        keyboard = InlineKeyboardMarkup([
-            [
-                InlineKeyboardButton("🐢 1 Rq", callback_data="spset_300_1_1 Rq / 5 Min"),
-                InlineKeyboardButton("🐢 2 Rq", callback_data="spset_300_2_2 Rq / 5 Min"),
-                InlineKeyboardButton("🐢 5 Rq", callback_data="spset_300_5_5 Rq / 5 Min"),
-            ],
-            [
-                InlineKeyboardButton("🐢 10 Rq", callback_data="spset_300_10_10 Rq / 5 Min"),
-                InlineKeyboardButton("🐢 20 Rq", callback_data="spset_300_20_20 Rq / 5 Min"),
-                InlineKeyboardButton("🐢 30 Rq", callback_data="spset_300_30_30 Rq / 5 Min"),
-            ],
-            [InlineKeyboardButton("🔙 Back to Time Menu", callback_data="join_channel")],
-        ])
-        await callback_query.answer()
-        await callback_query.edit_message_text(
-            text="🐢 <b>5 Minutes Options:</b>\n\nKitni requests set karni hain?",
-            reply_markup=keyboard,
-        )
+    elif data.startswith("delsel_"):
+        parts = data.split("_")
+        rq_count = int(parts[1])
+        delay_sec = float(parts[2])
 
-    elif data == "spcat_1h":
-        keyboard = InlineKeyboardMarkup([
-            [
-                InlineKeyboardButton("⏱️ 1 Rq", callback_data="spset_3600_1_1 Rq / 1 Hour"),
-                InlineKeyboardButton("⏱️ 5 Rq", callback_data="spset_3600_5_5 Rq / 1 Hour"),
-                InlineKeyboardButton("⏱️ 10 Rq", callback_data="spset_3600_10_10 Rq / 1 Hour"),
-            ],
-            [
-                InlineKeyboardButton("⏱️ 20 Rq", callback_data="spset_3600_20_20 Rq / 1 Hour"),
-                InlineKeyboardButton("⏱️ 30 Rq", callback_data="spset_3600_30_30 Rq / 1 Hour"),
-                InlineKeyboardButton("⏱️ 50 Rq", callback_data="spset_3600_50_50 Rq / 1 Hour"),
-            ],
-            [InlineKeyboardButton("🔙 Back to Time Menu", callback_data="join_channel")],
-        ])
-        await callback_query.answer()
-        await callback_query.edit_message_text(
-            text="⏱️ <b>1 Hour Options:</b>\n\n1 ghante me kitni requests bhejni hain?",
-            reply_markup=keyboard,
-        )
-
-    elif data == "spcat_2h":
-        keyboard = InlineKeyboardMarkup([
-            [
-                InlineKeyboardButton("⏱️ 1 Rq", callback_data="spset_7200_1_1 Rq / 2 Hours"),
-                InlineKeyboardButton("⏱️ 5 Rq", callback_data="spset_7200_5_5 Rq / 2 Hours"),
-                InlineKeyboardButton("⏱️ 10 Rq", callback_data="spset_7200_10_10 Rq / 2 Hours"),
-            ],
-            [
-                InlineKeyboardButton("⏱️ 20 Rq", callback_data="spset_7200_20_20 Rq / 2 Hours"),
-                InlineKeyboardButton("⏱️ 50 Rq", callback_data="spset_7200_50_50 Rq / 2 Hours"),
-            ],
-            [InlineKeyboardButton("🔙 Back to Time Menu", callback_data="join_channel")],
-        ])
-        await callback_query.answer()
-        await callback_query.edit_message_text(
-            text="⏱️ <b>2 Hours Options:</b>\n\n2 ghante me kitne joins karwane hain?",
-            reply_markup=keyboard,
-        )
-
-    elif data == "spcat_3h":
-        keyboard = InlineKeyboardMarkup([
-            [
-                InlineKeyboardButton("⏱️ 1 Rq", callback_data="spset_10800_1_1 Rq / 3 Hours"),
-                InlineKeyboardButton("⏱️ 10 Rq", callback_data="spset_10800_10_10 Rq / 3 Hours"),
-                InlineKeyboardButton("⏱️ 20 Rq", callback_data="spset_10800_20_20 Rq / 3 Hours"),
-            ],
-            [
-                InlineKeyboardButton("⏱️ 50 Rq", callback_data="spset_10800_50_50 Rq / 3 Hours"),
-            ],
-            [InlineKeyboardButton("🔙 Back to Time Menu", callback_data="join_channel")],
-        ])
-        await callback_query.answer()
-        await callback_query.edit_message_text(
-            text="⏱️ <b>3 Hours Options:</b>\n\n3 ghante me kitne joins karwane hain?",
-            reply_markup=keyboard,
-        )
-
-    elif data == "spcat_4h":
-        keyboard = InlineKeyboardMarkup([
-            [
-                InlineKeyboardButton("⏱️ 1 Rq", callback_data="spset_14400_1_1 Rq / 4 Hours"),
-                InlineKeyboardButton("⏱️ 10 Rq", callback_data="spset_14400_10_10 Rq / 4 Hours"),
-                InlineKeyboardButton("⏱️ 20 Rq", callback_data="spset_14400_20_20 Rq / 4 Hours"),
-            ],
-            [
-                InlineKeyboardButton("⏱️ 50 Rq", callback_data="spset_14400_50_50 Rq / 4 Hours"),
-                InlineKeyboardButton("⏱️ 100 Rq", callback_data="spset_14400_100_100 Rq / 4 Hours"),
-            ],
-            [InlineKeyboardButton("🔙 Back to Time Menu", callback_data="join_channel")],
-        ])
-        await callback_query.answer()
-        await callback_query.edit_message_text(
-            text="⏱️ <b>4 Hours Options:</b>\n\n4 ghante me kitne joins karwane hain?",
-            reply_markup=keyboard,
-        )
-
-    elif data.startswith("spset_"):
-        parts = data.split("_", 3)
-        time_sec = float(parts[1])
-        rq_count = int(parts[2])
-        speed_label = parts[3]
+        # Formatting text for clear visibility
+        if delay_sec >= 3600:
+            delay_str = f"{int(delay_sec / 3600)} Hour(s)"
+        elif delay_sec >= 60:
+            delay_str = f"{int(delay_sec / 60)} Min(s)"
+        else:
+            delay_str = f"{int(delay_sec)} Sec(s)"
 
         USER_STATES[user_id] = {
             "type": "WAITING_FOR_JOIN_LINK",
-            "time_sec": time_sec,
             "rq_count": rq_count,
-            "speed_text": speed_label,
+            "delay_sec": delay_sec,
+            "delay_str": delay_str,
         }
         await callback_query.answer()
         await callback_query.edit_message_text(
             text=(
-                f"✅ <b>Selected Setting:</b> <code>{speed_label}</code>\n"
-                f"📌 <b>Target Accounts Needed:</b> <code>{rq_count}</code>\n\n"
-                "🚀 <b>Join Channel / Group</b>\n\n"
+                f"✅ <b>Request Setting Saved!</b>\n"
+                f"• Total Rq: <code>{rq_count}</code>\n"
+                f"• Per Member Delay: <code>{delay_str}</code>\n\n"
+                "🚀 <b>Send Link:</b>\n"
                 "Public link (<code>https://t.me/name</code>) ya Private Invite Link"
                 " (<code>https://t.me/+xxx</code>) send karein:"
             ),
@@ -919,14 +825,13 @@ async def message_input_handler(client, message):
             )
 
     elif state_type == "WAITING_FOR_JOIN_LINK":
-        time_sec = float(state.get("time_sec", 60))
         rq_count = int(state.get("rq_count", 1))
-        speed_text = state.get("speed_text", "Normal")
+        delay_sec = float(state.get("delay_sec", 1.0))
+        delay_str = state.get("delay_str", f"{delay_sec} Sec")
 
         USER_STATES.pop(user_id, None)
         total_available = len(USERBOT_SESSIONS)
 
-        # CHECK 1: ACCOUNT VALIDATION
         if rq_count > total_available:
             await message.reply_text(
                 f"❌ **Order Cancelled:**\n\n"
@@ -937,14 +842,11 @@ async def message_input_handler(client, message):
             )
             return
 
-        # OPTIMIZED FAST DELAY CALCULATION
-        base_delay = time_sec / rq_count if rq_count > 0 else 0.5
-
         msg = await message.reply_text(
-            f"⚡ **Fast Join Process Active**\n"
-            f"⚡ Rate/Option: `{speed_text}`\n"
-            f"👥 Target Accounts: `{rq_count}` / `{total_available}`\n\n"
-            f"Fast & Safe mode me requests ja rahi hain..."
+            f"⚡ **Custom Speed Join Active**\n"
+            f"👥 Target Accounts: `{rq_count}` / `{total_available}`\n"
+            f"⏱️ Delay Per Member: `{delay_str}`\n\n"
+            f"Requests start ho rahi hain..."
         )
 
         target_sessions = list(USERBOT_SESSIONS.items())[:rq_count]
@@ -958,15 +860,13 @@ async def message_input_handler(client, message):
                 failed += 1
                 reasons.append(err_msg)
 
-            # SLIGHTLY FAST YET SAFE DELAY (0.1s - 0.4s JITTER)
             if idx < rq_count:
-                actual_delay = max(0.1, base_delay - 0.3) + random.uniform(0.1, 0.4)
-                await asyncio.sleep(actual_delay)
+                await asyncio.sleep(delay_sec)
 
         detail_text = (
             f"✅ <b>Join Operation Complete</b>\n\n"
-            f"• Selected Option: <code>{speed_text}</code>\n"
-            f"• Exact Rq Sent: <b>{rq_count}</b>\n"
+            f"• Total Rq Sent: <b>{rq_count}</b>\n"
+            f"• Gap Used: <b>{delay_str}</b>\n"
             f"• Successful Joins: {joined}\n"
             f"• Failed: {failed}"
         )
