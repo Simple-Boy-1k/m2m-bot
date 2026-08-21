@@ -46,26 +46,26 @@ STYLES = ["primary", "success", "danger"]
 
 missing_vars = []
 if not API_ID_RAW:
-  missing_vars.append("API_ID")
+    missing_vars.append("API_ID")
 if not API_HASH:
-  missing_vars.append("API_HASH")
+    missing_vars.append("API_HASH")
 if not BOT_TOKEN:
-  missing_vars.append("BOT_TOKEN")
+    missing_vars.append("BOT_TOKEN")
 if not OWNER_ID_RAW:
-  missing_vars.append("OWNER_ID")
+    missing_vars.append("OWNER_ID")
 if not MONGO_URL:
-  missing_vars.append("MONGO_URL")
+    missing_vars.append("MONGO_URL")
 
 if missing_vars:
-  raise ValueError(
-      f"CRITICAL ERROR: Heroku me ye missing hain -> {', '.join(missing_vars)}"
-  )
+    raise ValueError(
+        f"CRITICAL ERROR: Heroku me ye missing hain -> {', '.join(missing_vars)}"
+    )
 
 try:
-  API_ID = int(API_ID_RAW.strip())
-  OWNER_ID = int(OWNER_ID_RAW.strip())
+    API_ID = int(API_ID_RAW.strip())
+    OWNER_ID = int(OWNER_ID_RAW.strip())
 except ValueError:
-  raise ValueError("API_ID aur OWNER_ID me sirf numbers hone chahiye!")
+    raise ValueError("API_ID aur OWNER_ID me sirf numbers hone chahiye!")
 
 # MongoDB Connection Setup
 mongo_client = motor.motor_asyncio.AsyncIOMotorClient(MONGO_URL)
@@ -93,276 +93,276 @@ app = Client(
 
 
 async def load_data_from_db():
-  global ADMIN_IDS, USERBOT_SESSIONS
-  logging.info("MongoDB Database se data load ho raha hai...")
+    global ADMIN_IDS, USERBOT_SESSIONS
+    logging.info("MongoDB Database se data load ho raha hai...")
 
-  async for admin_doc in admins_col.find():
-    ADMIN_IDS.add(int(admin_doc["user_id"]))
+    async for admin_doc in admins_col.find():
+        ADMIN_IDS.add(int(admin_doc["user_id"]))
 
-  loaded_count = 0
-  async for session_doc in sessions_col.find():
-    session_str = session_doc["session"]
-    try:
-      ubot = Client(
-          "ubot_mem",
-          api_id=API_ID,
-          api_hash=API_HASH,
-          session_string=session_str,
-          in_memory=True,
-      )
-      await ubot.start()
-      USERBOT_SESSIONS[session_str] = ubot
-      loaded_count += 1
-    except Exception as e:
-      logging.error(f"Saved session invalid: {e}")
-      await sessions_col.delete_one({"session": session_str})
+    loaded_count = 0
+    async for session_doc in sessions_col.find():
+        session_str = session_doc["session"]
+        try:
+            ubot = Client(
+                "ubot_mem",
+                api_id=API_ID,
+                api_hash=API_HASH,
+                session_string=session_str,
+                in_memory=True,
+            )
+            await ubot.start()
+            USERBOT_SESSIONS[session_str] = ubot
+            loaded_count += 1
+        except Exception as e:
+            logging.error(f"Saved session invalid: {e}")
+            await sessions_col.delete_one({"session": session_str})
 
-  logging.info(
-      f"Database sync complete! Total {loaded_count} accounts aur"
-      f" {len(ADMIN_IDS)} admins restored."
-  )
+    logging.info(
+        f"Database sync complete! Total {loaded_count} accounts aur"
+        f" {len(ADMIN_IDS)} admins restored."
+    )
 
 
 # -------------------- HELPER FUNCTIONS --------------------
 
 
 async def join_target_chat(ubot, chat_link: str):
-  chat_link = chat_link.strip()
-  try:
-    chat = await ubot.join_chat(chat_link)
-    return True, chat, "Joined Successfully"
-  except UserAlreadyParticipant:
+    chat_link = chat_link.strip()
     try:
-      chat = await ubot.get_chat(chat_link)
-      return True, chat, "Already Joined"
-    except Exception:
-      return True, None, "Already Joined"
-  except InviteRequestSent:
-    return True, None, "Request Sent (Admin Approval Pending) ⏳"
-  except Exception as e:
-    err_msg = str(e)
-    if "USER_ALREADY_PARTICIPANT" in err_msg:
-      return True, None, "Already Joined"
-    if "INVITE_REQUEST_SENT" in err_msg:
-      return True, None, "Request Sent (Admin Approval Pending) ⏳"
-    return False, None, err_msg
+        chat = await ubot.join_chat(chat_link)
+        return True, chat, "Joined Successfully"
+    except UserAlreadyParticipant:
+        try:
+            chat = await ubot.get_chat(chat_link)
+            return True, chat, "Already Joined"
+        except Exception:
+            return True, None, "Already Joined"
+    except InviteRequestSent:
+        return True, None, "Request Sent (Admin Approval Pending) ⏳"
+    except Exception as e:
+        err_msg = str(e)
+        if "USER_ALREADY_PARTICIPANT" in err_msg:
+            return True, None, "Already Joined"
+        if "INVITE_REQUEST_SENT" in err_msg:
+            return True, None, "Request Sent (Admin Approval Pending) ⏳"
+        return False, None, err_msg
 
 
 async def join_vc_session(ubot, chat_link: str):
-  success, chat, msg = await join_target_chat(ubot, chat_link)
-  if not success and "Already Joined" not in msg and "Request Sent" not in msg:
-    return False, f"Chat Join Error: {msg}"
+    success, chat, msg = await join_target_chat(ubot, chat_link)
+    if not success and "Already Joined" not in msg and "Request Sent" not in msg:
+        return False, f"Chat Join Error: {msg}"
 
-  try:
-    if not chat:
-      chat = await ubot.get_chat(chat_link.strip())
-
-    peer = await ubot.resolve_peer(chat.id)
-    if chat.type in [ChatType.CHANNEL, ChatType.SUPERGROUP]:
-      full_chat = await ubot.invoke(
-          functions.channels.GetFullChannel(channel=peer)
-      )
-    else:
-      full_chat = await ubot.invoke(
-          functions.messages.GetFullChat(chat_id=chat.id)
-      )
-
-    call = full_chat.full_chat.call
-    if not call:
-      return False, "Is group/channel me Voice Chat ACTIVE nahi hai!"
-
-    random_ssrc = random.randint(100000, 999999)
-    params_data = (
-        f'{{"muted": true, "video_stopped": true, "ssrc": {random_ssrc}}}'
-    )
-
-    await ubot.invoke(
-        functions.phone.JoinGroupCall(
-            call=types.InputGroupCall(
-                id=call.id, access_hash=call.access_hash
-            ),
-            join_as=await ubot.resolve_peer("me"),
-            params=types.DataJSON(data=params_data),
-            muted=True,
-        )
-    )
-    return True, "VC Connected"
-  except Exception as e:
-    err_str = str(e)
-    if any(
-        x in err_str
-        for x in [
-            "GROUPCALL_SSRC_DUPLICATE",
-            "GROUPCALL_ALREADY_JOINED",
-            "SSRC_DUPLICATE_MUCH",
-        ]
-    ):
-      return True, "Already Connected in VC"
-    return False, f"VC Error: {err_str}"
-
-
-async def leave_vc_all():
-  global ACTIVE_VC_COUNT, CURRENT_VC_CHAT
-  if not CURRENT_VC_CHAT:
-    return 0
-
-  left_count = 0
-  target = CURRENT_VC_CHAT
-  CURRENT_VC_CHAT = None
-
-  for session_str, ubot in list(USERBOT_SESSIONS.items()):
     try:
-      chat = await ubot.get_chat(target)
-      peer = await ubot.resolve_peer(chat.id)
-      if chat.type in [ChatType.CHANNEL, ChatType.SUPERGROUP]:
-        full_chat = await ubot.invoke(
-            functions.channels.GetFullChannel(channel=peer)
-        )
-      else:
-        full_chat = await ubot.invoke(
-            functions.messages.GetFullChat(chat_id=chat.id)
+        if not chat:
+            chat = await ubot.get_chat(chat_link.strip())
+
+        peer = await ubot.resolve_peer(chat.id)
+        if chat.type in [ChatType.CHANNEL, ChatType.SUPERGROUP]:
+            full_chat = await ubot.invoke(
+                functions.channels.GetFullChannel(channel=peer)
+            )
+        else:
+            full_chat = await ubot.invoke(
+                functions.messages.GetFullChat(chat_id=chat.id)
+            )
+
+        call = full_chat.full_chat.call
+        if not call:
+            return False, "Is group/channel me Voice Chat ACTIVE nahi hai!"
+
+        random_ssrc = random.randint(100000, 999999)
+        params_data = (
+            f'{{"muted": true, "video_stopped": true, "ssrc": {random_ssrc}}}'
         )
 
-      call = full_chat.full_chat.call
-      if call:
         await ubot.invoke(
-            functions.phone.LeaveGroupCall(
+            functions.phone.JoinGroupCall(
                 call=types.InputGroupCall(
                     id=call.id, access_hash=call.access_hash
                 ),
-                source=0,
+                join_as=await ubot.resolve_peer("me"),
+                params=types.DataJSON(data=params_data),
+                muted=True,
             )
         )
-        left_count += 1
+        return True, "VC Connected"
     except Exception as e:
-      logging.error(f"VC Leave Error: {e}")
+        err_str = str(e)
+        if any(
+            x in err_str
+            for x in [
+                "GROUPCALL_SSRC_DUPLICATE",
+                "GROUPCALL_ALREADY_JOINED",
+                "SSRC_DUPLICATE_MUCH",
+            ]
+        ):
+            return True, "Already Connected in VC"
+        return False, f"VC Error: {err_str}"
 
-  ACTIVE_VC_COUNT = 0
-  return left_count
+
+async def leave_vc_all():
+    global ACTIVE_VC_COUNT, CURRENT_VC_CHAT
+    if not CURRENT_VC_CHAT:
+        return 0
+
+    left_count = 0
+    target = CURRENT_VC_CHAT
+    CURRENT_VC_CHAT = None
+
+    for session_str, ubot in list(USERBOT_SESSIONS.items()):
+        try:
+            chat = await ubot.get_chat(target)
+            peer = await ubot.resolve_peer(chat.id)
+            if chat.type in [ChatType.CHANNEL, ChatType.SUPERGROUP]:
+                full_chat = await ubot.invoke(
+                    functions.channels.GetFullChannel(channel=peer)
+                )
+            else:
+                full_chat = await ubot.invoke(
+                    functions.messages.GetFullChat(chat_id=chat.id)
+                )
+
+            call = full_chat.full_chat.call
+            if call:
+                await ubot.invoke(
+                    functions.phone.LeaveGroupCall(
+                        call=types.InputGroupCall(
+                            id=call.id, access_hash=call.access_hash
+                        ),
+                        source=0,
+                    )
+                )
+                left_count += 1
+        except Exception as e:
+            logging.error(f"VC Leave Error: {e}")
+
+    ACTIVE_VC_COUNT = 0
+    return left_count
 
 
 async def vc_keepalive_loop():
-  global ACTIVE_VC_COUNT
-  while True:
-    await asyncio.sleep(15)
-    if CURRENT_VC_CHAT and USERBOT_SESSIONS:
-      connected = 0
-      for session_str, ubot in list(USERBOT_SESSIONS.items()):
-        try:
-          ok, _ = await join_vc_session(ubot, CURRENT_VC_CHAT)
-          if ok:
-            connected += 1
-        except Exception:
-          pass
-      ACTIVE_VC_COUNT = connected
+    global ACTIVE_VC_COUNT
+    while True:
+        await asyncio.sleep(15)
+        if CURRENT_VC_CHAT and USERBOT_SESSIONS:
+            connected = 0
+            for session_str, ubot in list(USERBOT_SESSIONS.items()):
+                try:
+                    ok, _ = await join_vc_session(ubot, CURRENT_VC_CHAT)
+                    if ok:
+                        connected += 1
+                except Exception:
+                    pass
+            ACTIVE_VC_COUNT = connected
 
 
 async def leave_all_channels_robust(ubot):
-  left_count = 0
-  skipped_count = 0
+    left_count = 0
+    skipped_count = 0
 
-  try:
-    async for dialog in ubot.get_dialogs():
-      if dialog.chat.type in [
-          ChatType.CHANNEL,
-          ChatType.GROUP,
-          ChatType.SUPERGROUP,
-      ]:
-        try:
-          await ubot.leave_chat(dialog.chat.id)
-          left_count += 1
-          await asyncio.sleep(0.8)
-        except UserCreator:
-          skipped_count += 1
-          continue
-        except FloodWait as e:
-          await asyncio.sleep(e.value + 1)
-          try:
-            await ubot.leave_chat(dialog.chat.id)
-            left_count += 1
-          except Exception:
-            pass
-        except Exception:
-          continue
-  except Exception as e:
-    logging.error(f"Error during channel leave: {e}")
+    try:
+        async for dialog in ubot.get_dialogs():
+            if dialog.chat.type in [
+                ChatType.CHANNEL,
+                ChatType.GROUP,
+                ChatType.SUPERGROUP,
+            ]:
+                try:
+                    await ubot.leave_chat(dialog.chat.id)
+                    left_count += 1
+                    await asyncio.sleep(0.8)
+                except UserCreator:
+                    skipped_count += 1
+                    continue
+                except FloodWait as e:
+                    await asyncio.sleep(e.value + 1)
+                    try:
+                        await ubot.leave_chat(dialog.chat.id)
+                        left_count += 1
+                    except Exception:
+                        pass
+                except Exception:
+                    continue
+    except Exception as e:
+        logging.error(f"Error during channel leave: {e}")
 
-  return left_count, skipped_count
+    return left_count, skipped_count
 
 
 # -------------------- CONTROL PANEL LAYOUTS --------------------
 
 
 def get_panel_text():
-  views_status = "ENABLED ✅" if AUTO_VIEWS_ENABLED else "DISABLED ❌"
-  return (
-      "<b>P2P M2M CONTROL PANEL</b>\n\n"
-      f"👥 <b>ACCOUNT</b> : {len(USERBOT_SESSIONS)} IDs\n"
-      f"🗣 <b>ACTIVE VC</b> : {ACTIVE_VC_COUNT} IDs\n"
-      "🟢 <b>STATUS</b>: ONLINE 24/7 (☆𝙎𝘼𝙍𝙆𝘼𝙍 メ 𝙉𝙊𝙓☆)\n"
-      f"👁 <b>AUTO-VIEWS</b>: {views_status}\n"
-      "नॉक्स भाई और उनके दोस्त को चोर के साबकी माकी Chu*😂"
-  )
+    views_status = "ENABLED ✅" if AUTO_VIEWS_ENABLED else "DISABLED ❌"
+    return (
+        "<b>P2P M2M CONTROL PANEL</b>\n\n"
+        f"👥 <b>ACCOUNT</b> : {len(USERBOT_SESSIONS)} IDs\n"
+        f"🗣 <b>ACTIVE VC</b> : {ACTIVE_VC_COUNT} IDs\n"
+        "🟢 <b>STATUS</b>: ONLINE 24/7 (☆𝙎𝘼𝙍𝙆𝘼𝙍 メ 𝙉𝙊𝙓☆)\n"
+        f"👁 <b>AUTO-VIEWS</b>: {views_status}\n"
+        "नॉक्स भाई और उनके दोस्त को चोर के साबकी माकी Chu*😂"
+    )
 
 
 def get_main_keyboard():
-  enabled = BUTTON_COLOUR
-  return InlineKeyboardMarkup([
-      [
-          create_safe_button("➕ ADD ACCOUNT", "add_account", enabled),
-          create_safe_button("🚀 JOIN CHANNEL", "join_channel", enabled),
-      ],
-      [
-          create_safe_button("🎙 VC JOINER", "vc_joiner", enabled),
-          create_safe_button("🔴 VC LEAVE", "vc_leave", enabled),
-      ],
-      [
-          create_safe_button(
-              "🚪 LEAVE ALL CHANNEL", "leave_all_channel", enabled
-          ),
-          create_safe_button("🔔 PURGE DEAD", "purge_dead", enabled),
-      ],
-      [
-          create_safe_button("❤️ REACT + VIEWS", "react_views", enabled),
-          create_safe_button("👁 VIEWS TOGGLE", "views_toggle", enabled),
-      ],
-      [
-          create_safe_button(
-              "♻️ RECYCLE ACCOUNTS", "recycle_accounts", enabled
-          ),
-          create_safe_button("🔐 ADMIN PANEL", "admin_panel", enabled),
-      ],
-      [create_safe_button("🔄 REFRESH", "refresh", enabled)],
-  ])
+    enabled = BUTTON_COLOUR
+    return InlineKeyboardMarkup([
+        [
+            create_safe_button("➕ ADD ACCOUNT", "add_account", enabled),
+            create_safe_button("🚀 JOIN CHANNEL", "join_channel", enabled),
+        ],
+        [
+            create_safe_button("🎙 VC JOINER", "vc_joiner", enabled),
+            create_safe_button("🔴 VC LEAVE", "vc_leave", enabled),
+        ],
+        [
+            create_safe_button(
+                "🚪 LEAVE ALL CHANNEL", "leave_all_channel", enabled
+            ),
+            create_safe_button("🔔 PURGE DEAD", "purge_dead", enabled),
+        ],
+        [
+            create_safe_button("❤️ REACT + VIEWS", "react_views", enabled),
+            create_safe_button("👁 VIEWS TOGGLE", "views_toggle", enabled),
+        ],
+        [
+            create_safe_button(
+                "♻️ RECYCLE ACCOUNTS", "recycle_accounts", enabled
+            ),
+            create_safe_button("🔐 ADMIN PANEL", "admin_panel", enabled),
+        ],
+        [create_safe_button("🔄 REFRESH", "refresh", enabled)],
+    ])
 
 
 def get_admin_menu_keyboard():
-  return InlineKeyboardMarkup([
-      [
-          InlineKeyboardButton(
-              "➕ Add New Admin", callback_data="prompt_add_admin"
-          )
-      ],
-      [
-          InlineKeyboardButton(
-              "➖ Remove Admin", callback_data="prompt_remove_admin"
-          )
-      ],
-      [InlineKeyboardButton("📜 Admin List", callback_data="list_admins")],
-      [
-          InlineKeyboardButton(
-              "🔙 Back to Main Menu", callback_data="back_to_main"
-          )
-      ],
-  ])
+    return InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton(
+                "➕ Add New Admin", callback_data="prompt_add_admin"
+            )
+        ],
+        [
+            InlineKeyboardButton(
+                "➖ Remove Admin", callback_data="prompt_remove_admin"
+            )
+        ],
+        [InlineKeyboardButton("📜 Admin List", callback_data="list_admins")],
+        [
+            InlineKeyboardButton(
+                "🔙 Back to Main Menu", callback_data="back_to_main"
+            )
+        ],
+    ])
 
 
 def get_back_button():
-  return InlineKeyboardMarkup([[
-      InlineKeyboardButton(
-          "🔙 Back to Main Menu", callback_data="back_to_main"
-      )
-  ]])
+    return InlineKeyboardMarkup([[
+        InlineKeyboardButton(
+            "🔙 Back to Main Menu", callback_data="back_to_main"
+        )
+    ]])
 
 
 # -------------------- COMMAND HANDLERS --------------------
@@ -370,16 +370,16 @@ def get_back_button():
 
 @app.on_message(filters.command("start") & filters.private)
 async def start_handler(client, message):
-  user_id = message.from_user.id
-  if user_id not in ADMIN_IDS:
-    await message.reply_text(
-        "⛔ **Access Denied:** \n Kya Yrr😆 Admin Nhi Hai tu😝 ."
-    )
-    return
+    user_id = message.from_user.id
+    if user_id not in ADMIN_IDS:
+        await message.reply_text(
+            "⛔ **Access Denied:** \n Kya Yrr😆 Admin Nhi Hai tu😝 ."
+        )
+        return
 
-  await message.reply_text(
-      text=get_panel_text(), reply_markup=get_main_keyboard()
-  )
+    await message.reply_text(
+        text=get_panel_text(), reply_markup=get_main_keyboard()
+    )
 
 
 # -------------------- CALLBACK QUERY HANDLER --------------------
@@ -387,559 +387,493 @@ async def start_handler(client, message):
 
 @app.on_callback_query()
 async def callback_handler(client, callback_query: CallbackQuery):
-  global AUTO_VIEWS_ENABLED, ACTIVE_VC_COUNT
-  user_id = callback_query.from_user.id
+    global AUTO_VIEWS_ENABLED, ACTIVE_VC_COUNT
+    user_id = callback_query.from_user.id
 
-  if user_id not in ADMIN_IDS:
-    await callback_query.answer("⛔ Access Denied!", show_alert=True)
-    return
+    if user_id not in ADMIN_IDS:
+        await callback_query.answer("⛔ Access Denied!", show_alert=True)
+        return
 
-  data = callback_query.data
+    data = callback_query.data
 
-  if data == "add_account":
-    USER_STATES[user_id] = "WAITING_FOR_SESSION"
-    await callback_query.answer()
-    add_acc_keyboard = InlineKeyboardMarkup([
-        [
-            InlineKeyboardButton(
-                "⚡ Session Generator Bot",
-                url="https://t.me/Sarkarstring_sessionebot",
-            )
-        ],
-        [
-            InlineKeyboardButton(
-                "🔙 Back to Main Menu", callback_data="back_to_main"
-            )
-        ],
-    ])
-    await callback_query.edit_message_text(
-        text=(
-            "<b>➕ Add Account</b>\n\n"
-            "📌 <b>String Session Kaise Nikalein:</b>\n"
-            "1️⃣ Pehle @Sarkarstring_sessionebot par jayein.\n"
-            "2️⃣ Bot me <code>/start</code> dabayein aur <b>Pyrogram V2</b>"
-            " select karein.\n"
-            "3️⃣ Apna Number, OTP aur 2FA Password daal kar Session String"
-            " nikalein.\n\n"
-            "👉 Us <b>Pyrogram String Session Code</b> ko yahan send karein:"
-        ),
-        reply_markup=add_acc_keyboard,
-    )
-
-  # STEP 1: MAIN DURATION CATEGORY MENU
-  elif data == "join_channel":
-    if not USERBOT_SESSIONS:
-      await callback_query.answer(
-          "Pehle kam se kam ek account add karein!", show_alert=True
-      )
-      return
-    await callback_query.answer()
-
-    time_category_keyboard = InlineKeyboardMarkup([
-        [
-            InlineKeyboardButton(
-                "⏱️ 1 Minute Menu", callback_data="spcat_1m"
-            ),
-            InlineKeyboardButton(
-                "⏱️ 2 Minutes Menu", callback_data="spcat_2m"
-            ),
-        ],
-        [
-            InlineKeyboardButton(
-                "⏱️ 5 Minutes Menu", callback_data="spcat_5m"
-            ),
-            InlineKeyboardButton(
-                "⏱️ 1 Hour Menu", callback_data="spcat_1h"
-            ),
-        ],
-        [
-            InlineKeyboardButton(
-                "🔙 Back to Main Menu", callback_data="back_to_main"
-            )
-        ],
-    ])
-    await callback_query.edit_message_text(
-        text=(
-            "🚀 <b>Join Channel / Group</b>\n\n"
-            "⏱️ <b>Time Category Choose Karein:</b>\n"
-            "Aap kitne time span me request set karna chahte hain?"
-        ),
-        reply_markup=time_category_keyboard,
-    )
-
-  # STEP 2: EXPANDED NUMERICAL SUB-MENUS
-  elif data == "spcat_1m":
-    # 1 MINUTE SUB-MENU (1 to 15 Rq)
-    keyboard = InlineKeyboardMarkup([
-        [
-            InlineKeyboardButton(
-                "⚡ 1 Rq", callback_data="spset_60_1 Rq / 1 Min"
-            ),
-            InlineKeyboardButton(
-                "⚡ 2 Rq", callback_data="spset_30_2 Rq / 1 Min"
-            ),
-            InlineKeyboardButton(
-                "⚡ 3 Rq", callback_data="spset_20_3 Rq / 1 Min"
-            ),
-        ],
-        [
-            InlineKeyboardButton(
-                "⚡ 4 Rq", callback_data="spset_15_4 Rq / 1 Min"
-            ),
-            InlineKeyboardButton(
-                "⚡ 5 Rq", callback_data="spset_12_5 Rq / 1 Min"
-            ),
-            InlineKeyboardButton(
-                "⚡ 6 Rq", callback_data="spset_10_6 Rq / 1 Min"
-            ),
-        ],
-        [
-            InlineKeyboardButton(
-                "⚡ 7 Rq", callback_data="spset_8.6_7 Rq / 1 Min"
-            ),
-            InlineKeyboardButton(
-                "⚡ 8 Rq", callback_data="spset_7.5_8 Rq / 1 Min"
-            ),
-            InlineKeyboardButton(
-                "⚡ 9 Rq", callback_data="spset_6.7_9 Rq / 1 Min"
-            ),
-        ],
-        [
-            InlineKeyboardButton(
-                "⚡ 10 Rq", callback_data="spset_6_10 Rq / 1 Min"
-            ),
-            InlineKeyboardButton(
-                "⚡ 12 Rq", callback_data="spset_5_12 Rq / 1 Min"
-            ),
-            InlineKeyboardButton(
-                "⚡ 15 Rq", callback_data="spset_4_15 Rq / 1 Min"
-            ),
-        ],
-        [
-            InlineKeyboardButton(
-                "⚡ 20 Rq", callback_data="spset_3_20 Rq / 1 Min"
-            ),
-            InlineKeyboardButton(
-                "⚡ 30 Rq", callback_data="spset_2_30 Rq / 1 Min"
-            ),
-        ],
-        [
-            InlineKeyboardButton(
-                "🔙 Back to Time Menu", callback_data="join_channel"
-            )
-        ],
-    ])
-    await callback_query.answer()
-    await callback_query.edit_message_text(
-        text=(
-            "⚡ <b>1 Minute Speed Options:</b>\n\n1 minute me exact kitne"
-            " accounts join karwane hain?"
-        ),
-        reply_markup=keyboard,
-    )
-
-  elif data == "spcat_2m":
-    # 2 MINUTES SUB-MENU (1 to 10 Rq)
-    keyboard = InlineKeyboardMarkup([
-        [
-            InlineKeyboardButton(
-                "⚙️ 1 Rq", callback_data="spset_120_1 Rq / 2 Min"
-            ),
-            InlineKeyboardButton(
-                "⚙️ 2 Rq", callback_data="spset_60_2 Rq / 2 Min"
-            ),
-            InlineKeyboardButton(
-                "⚙️ 3 Rq", callback_data="spset_40_3 Rq / 2 Min"
-            ),
-        ],
-        [
-            InlineKeyboardButton(
-                "⚙️ 4 Rq", callback_data="spset_30_4 Rq / 2 Min"
-            ),
-            InlineKeyboardButton(
-                "⚙️ 5 Rq", callback_data="spset_24_5 Rq / 2 Min"
-            ),
-            InlineKeyboardButton(
-                "⚙️ 6 Rq", callback_data="spset_20_6 Rq / 2 Min"
-            ),
-        ],
-        [
-            InlineKeyboardButton(
-                "⚙️ 7 Rq", callback_data="spset_17.1_7 Rq / 2 Min"
-            ),
-            InlineKeyboardButton(
-                "⚙️ 8 Rq", callback_data="spset_15_8 Rq / 2 Min"
-            ),
-            InlineKeyboardButton(
-                "⚙️ 10 Rq", callback_data="spset_12_10 Rq / 2 Min"
-            ),
-        ],
-        [
-            InlineKeyboardButton(
-                "🔙 Back to Time Menu", callback_data="join_channel"
-            )
-        ],
-    ])
-    await callback_query.answer()
-    await callback_query.edit_message_text(
-        text=(
-            "⚙️ <b>2 Minutes Speed Options:</b>\n\n2 minutes me kitne"
-            " requests (joins) bhejni hain?"
-        ),
-        reply_markup=keyboard,
-    )
-
-  elif data == "spcat_5m":
-    # 5 MINUTES SUB-MENU (1 to 30 Rq)
-    keyboard = InlineKeyboardMarkup([
-        [
-            InlineKeyboardButton(
-                "🐢 1 Rq", callback_data="spset_300_1 Rq / 5 Min"
-            ),
-            InlineKeyboardButton(
-                "🐢 2 Rq", callback_data="spset_150_2 Rq / 5 Min"
-            ),
-            InlineKeyboardButton(
-                "🐢 3 Rq", callback_data="spset_100_3 Rq / 5 Min"
-            ),
-        ],
-        [
-            InlineKeyboardButton(
-                "🐢 5 Rq", callback_data="spset_60_5 Rq / 5 Min"
-            ),
-            InlineKeyboardButton(
-                "🐢 8 Rq", callback_data="spset_37.5_8 Rq / 5 Min"
-            ),
-            InlineKeyboardButton(
-                "🐢 10 Rq", callback_data="spset_30_10 Rq / 5 Min"
-            ),
-        ],
-        [
-            InlineKeyboardButton(
-                "🐢 15 Rq", callback_data="spset_20_15 Rq / 5 Min"
-            ),
-            InlineKeyboardButton(
-                "🐢 20 Rq", callback_data="spset_15_20 Rq / 5 Min"
-            ),
-            InlineKeyboardButton(
-                "🐢 25 Rq", callback_data="spset_12_25 Rq / 5 Min"
-            ),
-        ],
-        [
-            InlineKeyboardButton(
-                "🐢 30 Rq", callback_data="spset_10_30 Rq / 5 Min"
-            )
-        ],
-        [
-            InlineKeyboardButton(
-                "🔙 Back to Time Menu", callback_data="join_channel"
-            )
-        ],
-    ])
-    await callback_query.answer()
-    await callback_query.edit_message_text(
-        text="🐢 <b>5 Minutes Speed Options:</b>\n\nKitni requests set karni hain?",
-        reply_markup=keyboard,
-    )
-
-  elif data == "spcat_1h":
-    # 1 HOUR SUB-MENU
-    keyboard = InlineKeyboardMarkup([
-        [
-            InlineKeyboardButton(
-                "⏱️ 1 Rq", callback_data="spset_3600_1 Rq / Hour"
-            ),
-            InlineKeyboardButton(
-                "⏱️ 5 Rq", callback_data="spset_720_5 Rq / Hour"
-            ),
-            InlineKeyboardButton(
-                "⏱️ 10 Rq", callback_data="spset_360_10 Rq / Hour"
-            ),
-        ],
-        [
-            InlineKeyboardButton(
-                "⏱️ 20 Rq", callback_data="spset_180_20 Rq / Hour"
-            ),
-            InlineKeyboardButton(
-                "⏱️ 30 Rq", callback_data="spset_120_30 Rq / Hour"
-            ),
-            InlineKeyboardButton(
-                "⏱️ 50 Rq", callback_data="spset_72_50 Rq / Hour"
-            ),
-        ],
-        [
-            InlineKeyboardButton(
-                "⏱️ 60 Rq", callback_data="spset_60_60 Rq / Hour"
-            ),
-            InlineKeyboardButton(
-                "⏱️ 100 Rq", callback_data="spset_36_100 Rq / Hour"
-            ),
-        ],
-        [
-            InlineKeyboardButton(
-                "🔙 Back to Time Menu", callback_data="join_channel"
-            )
-        ],
-    ])
-    await callback_query.answer()
-    await callback_query.edit_message_text(
-        text=(
-            "⏱️ <b>1 Hour Speed Options:</b>\n\n1 ghante me kitne requests"
-            " bhejna chahte hain?"
-        ),
-        reply_markup=keyboard,
-    )
-
-  # STEP 3: SAVE DELAY AND REQUEST LINK
-  elif data.startswith("spset_"):
-    parts = data.split("_", 2)
-    delay_val = float(parts[1])
-    speed_label = parts[2]
-
-    USER_STATES[user_id] = {
-        "type": "WAITING_FOR_JOIN_LINK",
-        "delay": delay_val,
-        "speed_text": speed_label,
-    }
-    await callback_query.answer()
-    await callback_query.edit_message_text(
-        text=(
-            f"✅ <b>Selected Rate Limit:</b> <code>{speed_label}</code>\n\n"
-            "🚀 <b>Join Channel / Group</b>\n\n"
-            "Public link (<code>https://t.me/name</code>) ya Private Invite Link"
-            " (<code>https://t.me/+xxx</code>) send karein:"
-        ),
-        reply_markup=get_back_button(),
-    )
-
-  elif data == "vc_joiner":
-    if not USERBOT_SESSIONS:
-      await callback_query.answer(
-          "Koi active account nahi hai!", show_alert=True
-      )
-      return
-    USER_STATES[user_id] = "WAITING_FOR_VC_LINK"
-    await callback_query.answer()
-    await callback_query.edit_message_text(
-        text=(
-            "<b>🎙 VC Joiner</b>\n\nJis Group me VC chal rahi hai uska Link ya"
-            " Username send karein:"
-        ),
-        reply_markup=get_back_button(),
-    )
-
-  elif data == "vc_leave":
-    if not CURRENT_VC_CHAT and ACTIVE_VC_COUNT == 0:
-      await callback_query.answer(
-          "Koi bhi active VC session nahi mila!", show_alert=True
-      )
-      return
-
-    await callback_query.answer(
-        "VC se disconnect ho rahe hain...", show_alert=True
-    )
-    left_total = await leave_vc_all()
-    await callback_query.edit_message_text(
-        text=(
-            "🔴 <b>VC LEAVE COMPLETE</b>\n\nSuccessfully"
-            f" <b>{left_total}</b> accounts VC se leave kar chuke hain."
-        ),
-        reply_markup=get_back_button(),
-    )
-
-  elif data == "leave_all_channel":
-    if not USERBOT_SESSIONS:
-      await callback_query.answer(
-          "Koi active account nahi hai!", show_alert=True
-      )
-      return
-
-    await callback_query.answer(
-        "Mass channel cleanup start ho raha hai...", show_alert=True
-    )
-    await callback_query.edit_message_text(
-        "⏳ **Cleaning Process Active:** Sabhi accounts se channels/groups"
-        " leave kiye ja rahe hain..."
-    )
-
-    total_left, total_skipped = 0, 0
-    for session_str, ubot in list(USERBOT_SESSIONS.items()):
-      left, skipped = await leave_all_channels_robust(ubot)
-      total_left += left
-      total_skipped += skipped
-
-    await callback_query.edit_message_text(
-        text=(
-            "<b>🚪 LEAVE ALL CHANNELS COMPLETE</b>\n\n"
-            f"✅ <b>Successfully Left:</b> {total_left} Channels/Groups\n"
-            f"⚠️ <b>Skipped (Owned/Created):</b> {total_skipped} Channels"
-        ),
-        reply_markup=get_back_button(),
-    )
-
-  elif data == "purge_dead":
-    await callback_query.answer("Testing accounts...", show_alert=True)
-    dead_count = 0
-    for session_str, ubot in list(USERBOT_SESSIONS.items()):
-      try:
-        await ubot.get_me()
-      except (UserDeactivated, SessionRevoked, AuthKeyUnregistered, Exception):
-        del USERBOT_SESSIONS[session_str]
-        await sessions_col.delete_one({"session": session_str})
-        dead_count += 1
-
-    await callback_query.edit_message_text(
-        text=(
-            f"<b>🔔 Purge Complete</b>\n\n{dead_count} dead accounts MongoDB"
-            " aur Bot se remove kar diye gaye."
-        ),
-        reply_markup=get_back_button(),
-    )
-
-  elif data == "react_views":
-    if not USERBOT_SESSIONS:
-      await callback_query.answer(
-          "Pehle account add karein!", show_alert=True
-      )
-      return
-    USER_STATES[user_id] = "WAITING_FOR_POST_LINK"
-    await callback_query.answer()
-    await callback_query.edit_message_text(
-        text=(
-            "<b>❤️ React + Views</b>\n\nTelegram Post ka Link send karein"
-            " (<code>https://t.me/channel/123</code> ya"
-            " <code>https://t.me/c/123456/789</code>):"
-        ),
-        reply_markup=get_back_button(),
-    )
-
-  elif data == "views_toggle":
-    AUTO_VIEWS_ENABLED = not AUTO_VIEWS_ENABLED
-    status_msg = "ENABLED ✅" if AUTO_VIEWS_ENABLED else "DISABLED ❌"
-    await callback_query.answer(f"Auto-Views: {status_msg}", show_alert=True)
-    await callback_query.edit_message_text(
-        text=get_panel_text(), reply_markup=get_main_keyboard()
-    )
-
-  elif data == "recycle_accounts":
-    await callback_query.answer("Recycling all accounts...", show_alert=True)
-    recycled = 0
-    for session_str, ubot in list(USERBOT_SESSIONS.items()):
-      try:
-        await ubot.stop()
-        await ubot.start()
-        recycled += 1
-      except Exception:
-        pass
-    await callback_query.edit_message_text(
-        text=f"✅ Total {recycled} accounts successfully recycle/restart hue.",
-        reply_markup=get_back_button(),
-    )
-
-  elif data == "refresh":
-    alive_accounts = 0
-    for session_str, ubot in list(USERBOT_SESSIONS.items()):
-      if ubot.is_connected:
-        alive_accounts += 1
-
-    if not CURRENT_VC_CHAT:
-      ACTIVE_VC_COUNT = 0
-
-    await callback_query.answer("Panel Refreshed! 🔄")
-    await callback_query.edit_message_text(
-        text=get_panel_text(), reply_markup=get_main_keyboard()
-    )
-
-  elif data == "admin_panel":
-    if user_id != OWNER_ID:
-      await callback_query.answer(
-          "⛔ Only Main Owner can manage Admin Panel!", show_alert=True
-      )
-      return
-    await callback_query.answer()
-    await callback_query.edit_message_text(
-        text=(
-            "<b>🔐 ADMIN PANEL MANAGEMENT</b>\n\nYahan se aap naye Admin add"
-            " ya remove kar sakte hain:"
-        ),
-        reply_markup=get_admin_menu_keyboard(),
-    )
-
-  elif data == "prompt_add_admin":
-    if user_id != OWNER_ID:
-      return
-    USER_STATES[user_id] = "WAITING_FOR_ADMIN_ID"
-    await callback_query.answer()
-    await callback_query.edit_message_text(
-        text="<b>➕ Add New Admin</b>\n\nTelegram User ID send karein:",
-        reply_markup=InlineKeyboardMarkup([[
-            InlineKeyboardButton("🔙 Back", callback_data="admin_panel")
-        ]]),
-    )
-
-  elif data == "prompt_remove_admin":
-    if user_id != OWNER_ID:
-      return
-    remove_buttons = []
-    for aid in ADMIN_IDS:
-      if aid != OWNER_ID:
-        remove_buttons.append([
-            InlineKeyboardButton(
-                f"❌ Remove: {aid}", callback_data=f"rem_adm_{aid}"
-            )
+    if data == "add_account":
+        USER_STATES[user_id] = "WAITING_FOR_SESSION"
+        await callback_query.answer()
+        add_acc_keyboard = InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton(
+                    "⚡ Session Generator Bot",
+                    url="https://t.me/Sarkarstring_sessionebot",
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    "🔙 Back to Main Menu", callback_data="back_to_main"
+                )
+            ],
         ])
+        await callback_query.edit_message_text(
+            text=(
+                "<b>➕ Add Account</b>\n\n"
+                "📌 <b>String Session Kaise Nikalein:</b>\n"
+                "1️⃣ Pehle @Sarkarstring_sessionebot par jayein.\n"
+                "2️⃣ Bot me <code>/start</code> dabayein aur <b>Pyrogram V2</b>"
+                " select karein.\n"
+                "3️⃣ Apna Number, OTP aur 2FA Password daal kar Session String"
+                " nikalein.\n\n"
+                "👉 Us <b>Pyrogram String Session Code</b> ko yahan send karein:"
+            ),
+            reply_markup=add_acc_keyboard,
+        )
 
-    if not remove_buttons:
-      await callback_query.answer(
-          "Koi extra Admin nahi hai!", show_alert=True
-      )
-      return
+    # STEP 1: MAIN DURATION CATEGORY MENU
+    elif data == "join_channel":
+        if not USERBOT_SESSIONS:
+            await callback_query.answer(
+                "Pehle kam se kam ek account add karein!", show_alert=True
+            )
+            return
+        await callback_query.answer()
 
-    remove_buttons.append(
-        [InlineKeyboardButton("🔙 Back", callback_data="admin_panel")]
-    )
-    await callback_query.answer()
-    await callback_query.edit_message_text(
-        text=(
-            "<b>➖ Remove Admin Panel</b>\n\nJis Admin ko hatana hai click"
-            " karein:"
-        ),
-        reply_markup=InlineKeyboardMarkup(remove_buttons),
-    )
+        time_category_keyboard = InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton(
+                    "⏱️ 1 Min Menu", callback_data="spcat_1m"
+                ),
+                InlineKeyboardButton(
+                    "⏱️ 2 Min Menu", callback_data="spcat_2m"
+                ),
+            ],
+            [
+                InlineKeyboardButton(
+                    "⏱️ 5 Min Menu", callback_data="spcat_5m"
+                ),
+                InlineKeyboardButton(
+                    "⏱️ 1 Hour Menu", callback_data="spcat_1h"
+                ),
+            ],
+            [
+                InlineKeyboardButton(
+                    "⏱️ 2 Hours Menu", callback_data="spcat_2h"
+                ),
+                InlineKeyboardButton(
+                    "⏱️ 3 Hours Menu", callback_data="spcat_3h"
+                ),
+            ],
+            [
+                InlineKeyboardButton(
+                    "⏱️ 4 Hours Menu", callback_data="spcat_4h"
+                ),
+            ],
+            [
+                InlineKeyboardButton(
+                    "🔙 Back to Main Menu", callback_data="back_to_main"
+                )
+            ],
+        ])
+        await callback_query.edit_message_text(
+            text=(
+                "🚀 <b>Join Channel / Group</b>\n\n"
+                f"📊 <b>Total Active Accounts:</b> <code>{len(USERBOT_SESSIONS)}</code>\n\n"
+                "⏱️ <b>Time Category Choose Karein:</b>\n"
+                "Aap kitne time span me request set karna chahte hain?"
+            ),
+            reply_markup=time_category_keyboard,
+        )
 
-  elif data.startswith("rem_adm_"):
-    if user_id != OWNER_ID:
-      return
-    target_id = int(data.split("_")[2])
-    if target_id in ADMIN_IDS:
-      ADMIN_IDS.remove(target_id)
-      await admins_col.delete_one({"user_id": target_id})
-      await callback_query.answer(
-          "Admin removed from MongoDB!", show_alert=True
-      )
-    await callback_query.edit_message_text(
-        text="<b>🔐 ADMIN PANEL MANAGEMENT</b>\n\nAdmin remove ho gaya.",
-        reply_markup=get_admin_menu_keyboard(),
-    )
+    # STEP 2: EXPANDED SUB-MENUS WITH EXACT TIMER/COUNT DATA
+    elif data == "spcat_1m":
+        keyboard = InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton("⚡ 1 Rq", callback_data="spset_60_1_1 Rq / 1 Min"),
+                InlineKeyboardButton("⚡ 2 Rq", callback_data="spset_60_2_2 Rq / 1 Min"),
+                InlineKeyboardButton("⚡ 3 Rq", callback_data="spset_60_3_3 Rq / 1 Min"),
+            ],
+            [
+                InlineKeyboardButton("⚡ 5 Rq", callback_data="spset_60_5_5 Rq / 1 Min"),
+                InlineKeyboardButton("⚡ 10 Rq", callback_data="spset_60_10_10 Rq / 1 Min"),
+                InlineKeyboardButton("⚡ 15 Rq", callback_data="spset_60_15_15 Rq / 1 Min"),
+            ],
+            [
+                InlineKeyboardButton("⚡ 20 Rq", callback_data="spset_60_20_20 Rq / 1 Min"),
+                InlineKeyboardButton("⚡ 30 Rq", callback_data="spset_60_30_30 Rq / 1 Min"),
+            ],
+            [InlineKeyboardButton("🔙 Back to Time Menu", callback_data="join_channel")],
+        ])
+        await callback_query.answer()
+        await callback_query.edit_message_text(
+            text="⚡ <b>1 Minute Options:</b>\n\nExact kitne accounts join karwane hain?",
+            reply_markup=keyboard,
+        )
 
-  elif data == "list_admins":
-    admin_text = "<b>📜 Current Admins List:</b>\n\n"
-    for aid in ADMIN_IDS:
-      role = " (Main Owner)" if aid == OWNER_ID else " (Admin)"
-      admin_text += f"• <code>{aid}</code>{role}\n"
-    await callback_query.answer()
-    await callback_query.edit_message_text(
-        text=admin_text,
-        reply_markup=InlineKeyboardMarkup([[
-            InlineKeyboardButton("🔙 Back", callback_data="admin_panel")
-        ]]),
-    )
+    elif data == "spcat_2m":
+        keyboard = InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton("⚙️ 1 Rq", callback_data="spset_120_1_1 Rq / 2 Min"),
+                InlineKeyboardButton("⚙️ 2 Rq", callback_data="spset_120_2_2 Rq / 2 Min"),
+                InlineKeyboardButton("⚙️ 3 Rq", callback_data="spset_120_3_3 Rq / 2 Min"),
+            ],
+            [
+                InlineKeyboardButton("⚙️ 5 Rq", callback_data="spset_120_5_5 Rq / 2 Min"),
+                InlineKeyboardButton("⚙️ 10 Rq", callback_data="spset_120_10_10 Rq / 2 Min"),
+            ],
+            [InlineKeyboardButton("🔙 Back to Time Menu", callback_data="join_channel")],
+        ])
+        await callback_query.answer()
+        await callback_query.edit_message_text(
+            text="⚙️ <b>2 Minutes Options:</b>\n\nKitni requests bhejni hain?",
+            reply_markup=keyboard,
+        )
 
-  elif data == "back_to_main":
-    USER_STATES.pop(user_id, None)
-    await callback_query.edit_message_text(
-        text=get_panel_text(), reply_markup=get_main_keyboard()
-    )
+    elif data == "spcat_5m":
+        keyboard = InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton("🐢 1 Rq", callback_data="spset_300_1_1 Rq / 5 Min"),
+                InlineKeyboardButton("🐢 2 Rq", callback_data="spset_300_2_2 Rq / 5 Min"),
+                InlineKeyboardButton("🐢 5 Rq", callback_data="spset_300_5_5 Rq / 5 Min"),
+            ],
+            [
+                InlineKeyboardButton("🐢 10 Rq", callback_data="spset_300_10_10 Rq / 5 Min"),
+                InlineKeyboardButton("🐢 20 Rq", callback_data="spset_300_20_20 Rq / 5 Min"),
+                InlineKeyboardButton("🐢 30 Rq", callback_data="spset_300_30_30 Rq / 5 Min"),
+            ],
+            [InlineKeyboardButton("🔙 Back to Time Menu", callback_data="join_channel")],
+        ])
+        await callback_query.answer()
+        await callback_query.edit_message_text(
+            text="🐢 <b>5 Minutes Options:</b>\n\nKitni requests set karni hain?",
+            reply_markup=keyboard,
+        )
+
+    elif data == "spcat_1h":
+        keyboard = InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton("⏱️ 1 Rq", callback_data="spset_3600_1_1 Rq / 1 Hour"),
+                InlineKeyboardButton("⏱️ 5 Rq", callback_data="spset_3600_5_5 Rq / 1 Hour"),
+                InlineKeyboardButton("⏱️ 10 Rq", callback_data="spset_3600_10_10 Rq / 1 Hour"),
+            ],
+            [
+                InlineKeyboardButton("⏱️ 20 Rq", callback_data="spset_3600_20_20 Rq / 1 Hour"),
+                InlineKeyboardButton("⏱️ 30 Rq", callback_data="spset_3600_30_30 Rq / 1 Hour"),
+                InlineKeyboardButton("⏱️ 50 Rq", callback_data="spset_3600_50_50 Rq / 1 Hour"),
+            ],
+            [InlineKeyboardButton("🔙 Back to Time Menu", callback_data="join_channel")],
+        ])
+        await callback_query.answer()
+        await callback_query.edit_message_text(
+            text="⏱️ <b>1 Hour Options:</b>\n\n1 ghante me kitni requests bhejni hain?",
+            reply_markup=keyboard,
+        )
+
+    elif data == "spcat_2h":
+        keyboard = InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton("⏱️ 1 Rq", callback_data="spset_7200_1_1 Rq / 2 Hours"),
+                InlineKeyboardButton("⏱️ 5 Rq", callback_data="spset_7200_5_5 Rq / 2 Hours"),
+                InlineKeyboardButton("⏱️ 10 Rq", callback_data="spset_7200_10_10 Rq / 2 Hours"),
+            ],
+            [
+                InlineKeyboardButton("⏱️ 20 Rq", callback_data="spset_7200_20_20 Rq / 2 Hours"),
+                InlineKeyboardButton("⏱️ 50 Rq", callback_data="spset_7200_50_50 Rq / 2 Hours"),
+            ],
+            [InlineKeyboardButton("🔙 Back to Time Menu", callback_data="join_channel")],
+        ])
+        await callback_query.answer()
+        await callback_query.edit_message_text(
+            text="⏱️ <b>2 Hours Options:</b>\n\n2 ghante me kitne joins karwane hain?",
+            reply_markup=keyboard,
+        )
+
+    elif data == "spcat_3h":
+        keyboard = InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton("⏱️ 1 Rq", callback_data="spset_10800_1_1 Rq / 3 Hours"),
+                InlineKeyboardButton("⏱️ 10 Rq", callback_data="spset_10800_10_10 Rq / 3 Hours"),
+                InlineKeyboardButton("⏱️ 20 Rq", callback_data="spset_10800_20_20 Rq / 3 Hours"),
+            ],
+            [
+                InlineKeyboardButton("⏱️ 50 Rq", callback_data="spset_10800_50_50 Rq / 3 Hours"),
+            ],
+            [InlineKeyboardButton("🔙 Back to Time Menu", callback_data="join_channel")],
+        ])
+        await callback_query.answer()
+        await callback_query.edit_message_text(
+            text="⏱️ <b>3 Hours Options:</b>\n\n3 ghante me kitne joins karwane hain?",
+            reply_markup=keyboard,
+        )
+
+    elif data == "spcat_4h":
+        keyboard = InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton("⏱️ 1 Rq", callback_data="spset_14400_1_1 Rq / 4 Hours"),
+                InlineKeyboardButton("⏱️ 10 Rq", callback_data="spset_14400_10_10 Rq / 4 Hours"),
+                InlineKeyboardButton("⏱️ 20 Rq", callback_data="spset_14400_20_20 Rq / 4 Hours"),
+            ],
+            [
+                InlineKeyboardButton("⏱️ 50 Rq", callback_data="spset_14400_50_50 Rq / 4 Hours"),
+                InlineKeyboardButton("⏱️ 100 Rq", callback_data="spset_14400_100_100 Rq / 4 Hours"),
+            ],
+            [InlineKeyboardButton("🔙 Back to Time Menu", callback_data="join_channel")],
+        ])
+        await callback_query.answer()
+        await callback_query.edit_message_text(
+            text="⏱️ <b>4 Hours Options:</b>\n\n4 ghante me kitne joins karwane hain?",
+            reply_markup=keyboard,
+        )
+
+    # STEP 3: SAVE TIME & RQ COUNT, THEN ASK FOR LINK
+    elif data.startswith("spset_"):
+        parts = data.split("_", 3)
+        time_sec = float(parts[1])
+        rq_count = int(parts[2])
+        speed_label = parts[3]
+
+        USER_STATES[user_id] = {
+            "type": "WAITING_FOR_JOIN_LINK",
+            "time_sec": time_sec,
+            "rq_count": rq_count,
+            "speed_text": speed_label,
+        }
+        await callback_query.answer()
+        await callback_query.edit_message_text(
+            text=(
+                f"✅ <b>Selected Setting:</b> <code>{speed_label}</code>\n"
+                f"📌 <b>Target Accounts Needed:</b> <code>{rq_count}</code>\n\n"
+                "🚀 <b>Join Channel / Group</b>\n\n"
+                "Public link (<code>https://t.me/name</code>) ya Private Invite Link"
+                " (<code>https://t.me/+xxx</code>) send karein:"
+            ),
+            reply_markup=get_back_button(),
+        )
+
+    elif data == "vc_joiner":
+        if not USERBOT_SESSIONS:
+            await callback_query.answer(
+                "Koi active account nahi hai!", show_alert=True
+            )
+            return
+        USER_STATES[user_id] = "WAITING_FOR_VC_LINK"
+        await callback_query.answer()
+        await callback_query.edit_message_text(
+            text=(
+                "<b>🎙 VC Joiner</b>\n\nJis Group me VC chal rahi hai uska Link ya"
+                " Username send karein:"
+            ),
+            reply_markup=get_back_button(),
+        )
+
+    elif data == "vc_leave":
+        if not CURRENT_VC_CHAT and ACTIVE_VC_COUNT == 0:
+            await callback_query.answer(
+                "Koi bhi active VC session nahi mila!", show_alert=True
+            )
+            return
+
+        await callback_query.answer(
+            "VC se disconnect ho rahe hain...", show_alert=True
+        )
+        left_total = await leave_vc_all()
+        await callback_query.edit_message_text(
+            text=(
+                "🔴 <b>VC LEAVE COMPLETE</b>\n\nSuccessfully"
+                f" <b>{left_total}</b> accounts VC se leave kar chuke hain."
+            ),
+            reply_markup=get_back_button(),
+        )
+
+    elif data == "leave_all_channel":
+        if not USERBOT_SESSIONS:
+            await callback_query.answer(
+                "Koi active account nahi hai!", show_alert=True
+            )
+            return
+
+        await callback_query.answer(
+            "Mass channel cleanup start ho raha hai...", show_alert=True
+        )
+        await callback_query.edit_message_text(
+            "⏳ **Cleaning Process Active:** Sabhi accounts se channels/groups"
+            " leave kiye ja rahe hain..."
+        )
+
+        total_left, total_skipped = 0, 0
+        for session_str, ubot in list(USERBOT_SESSIONS.items()):
+            left, skipped = await leave_all_channels_robust(ubot)
+            total_left += left
+            total_skipped += skipped
+
+        await callback_query.edit_message_text(
+            text=(
+                "<b>🚪 LEAVE ALL CHANNELS COMPLETE</b>\n\n"
+                f"✅ <b>Successfully Left:</b> {total_left} Channels/Groups\n"
+                f"⚠️ <b>Skipped (Owned/Created):</b> {total_skipped} Channels"
+            ),
+            reply_markup=get_back_button(),
+        )
+
+    elif data == "purge_dead":
+        await callback_query.answer("Testing accounts...", show_alert=True)
+        dead_count = 0
+        for session_str, ubot in list(USERBOT_SESSIONS.items()):
+            try:
+                await ubot.get_me()
+            except (UserDeactivated, SessionRevoked, AuthKeyUnregistered, Exception):
+                del USERBOT_SESSIONS[session_str]
+                await sessions_col.delete_one({"session": session_str})
+                dead_count += 1
+
+        await callback_query.edit_message_text(
+            text=(
+                f"<b>🔔 Purge Complete</b>\n\n{dead_count} dead accounts MongoDB"
+                " aur Bot se remove kar diye gaye."
+            ),
+            reply_markup=get_back_button(),
+        )
+
+    elif data == "react_views":
+        if not USERBOT_SESSIONS:
+            await callback_query.answer(
+                "Pehle account add karein!", show_alert=True
+            )
+            return
+        USER_STATES[user_id] = "WAITING_FOR_POST_LINK"
+        await callback_query.answer()
+        await callback_query.edit_message_text(
+            text=(
+                "<b>❤️ React + Views</b>\n\nTelegram Post ka Link send karein"
+                " (<code>https://t.me/channel/123</code> ya"
+                " <code>https://t.me/c/123456/789</code>):"
+            ),
+            reply_markup=get_back_button(),
+        )
+
+    elif data == "views_toggle":
+        AUTO_VIEWS_ENABLED = not AUTO_VIEWS_ENABLED
+        status_msg = "ENABLED ✅" if AUTO_VIEWS_ENABLED else "DISABLED ❌"
+        await callback_query.answer(f"Auto-Views: {status_msg}", show_alert=True)
+        await callback_query.edit_message_text(
+            text=get_panel_text(), reply_markup=get_main_keyboard()
+        )
+
+    elif data == "recycle_accounts":
+        await callback_query.answer("Recycling all accounts...", show_alert=True)
+        recycled = 0
+        for session_str, ubot in list(USERBOT_SESSIONS.items()):
+            try:
+                await ubot.stop()
+                await ubot.start()
+                recycled += 1
+            except Exception:
+                pass
+        await callback_query.edit_message_text(
+            text=f"✅ Total {recycled} accounts successfully recycle/restart hue.",
+            reply_markup=get_back_button(),
+        )
+
+    elif data == "refresh":
+        alive_accounts = 0
+        for session_str, ubot in list(USERBOT_SESSIONS.items()):
+            if ubot.is_connected:
+                alive_accounts += 1
+
+        if not CURRENT_VC_CHAT:
+            ACTIVE_VC_COUNT = 0
+
+        await callback_query.answer("Panel Refreshed! 🔄")
+        await callback_query.edit_message_text(
+            text=get_panel_text(), reply_markup=get_main_keyboard()
+        )
+
+    elif data == "admin_panel":
+        if user_id != OWNER_ID:
+            await callback_query.answer(
+                "⛔ Only Main Owner can manage Admin Panel!", show_alert=True
+            )
+            return
+        await callback_query.answer()
+        await callback_query.edit_message_text(
+            text=(
+                "<b>🔐 ADMIN PANEL MANAGEMENT</b>\n\nYahan se aap naye Admin add"
+                " ya remove kar sakte hain:"
+            ),
+            reply_markup=get_admin_menu_keyboard(),
+        )
+
+    elif data == "prompt_add_admin":
+        if user_id != OWNER_ID:
+            return
+        USER_STATES[user_id] = "WAITING_FOR_ADMIN_ID"
+        await callback_query.answer()
+        await callback_query.edit_message_text(
+            text="<b>➕ Add New Admin</b>\n\nTelegram User ID send karein:",
+            reply_markup=InlineKeyboardMarkup([[
+                InlineKeyboardButton("🔙 Back", callback_data="admin_panel")
+            ]]),
+        )
+
+    elif data == "prompt_remove_admin":
+        if user_id != OWNER_ID:
+            return
+        remove_buttons = []
+        for aid in ADMIN_IDS:
+            if aid != OWNER_ID:
+                remove_buttons.append([
+                    InlineKeyboardButton(
+                        f"❌ Remove: {aid}", callback_data=f"rem_adm_{aid}"
+                    )
+                ])
+
+        if not remove_buttons:
+            await callback_query.answer(
+                "Koi extra Admin nahi hai!", show_alert=True
+            )
+            return
+
+        remove_buttons.append(
+            [InlineKeyboardButton("🔙 Back", callback_data="admin_panel")]
+        )
+        await callback_query.answer()
+        await callback_query.edit_message_text(
+            text=(
+                "<b>➖ Remove Admin Panel</b>\n\nJis Admin ko hatana hai click"
+                " karein:"
+            ),
+            reply_markup=InlineKeyboardMarkup(remove_buttons),
+        )
+
+    elif data.startswith("rem_adm_"):
+        if user_id != OWNER_ID:
+            return
+        target_id = int(data.split("_")[2])
+        if target_id in ADMIN_IDS:
+            ADMIN_IDS.remove(target_id)
+            await admins_col.delete_one({"user_id": target_id})
+            await callback_query.answer(
+                "Admin removed from MongoDB!", show_alert=True
+            )
+        await callback_query.edit_message_text(
+            text="<b>🔐 ADMIN PANEL MANAGEMENT</b>\n\nAdmin remove ho gaya.",
+            reply_markup=get_admin_menu_keyboard(),
+        )
+
+    elif data == "list_admins":
+        admin_text = "<b>📜 Current Admins List:</b>\n\n"
+        for aid in ADMIN_IDS:
+            role = " (Main Owner)" if aid == OWNER_ID else " (Admin)"
+            admin_text += f"• <code>{aid}</code>{role}\n"
+        await callback_query.answer()
+        await callback_query.edit_message_text(
+            text=admin_text,
+            reply_markup=InlineKeyboardMarkup([[
+                InlineKeyboardButton("🔙 Back", callback_data="admin_panel")
+            ]]),
+        )
+
+    elif data == "back_to_main":
+        USER_STATES.pop(user_id, None)
+        await callback_query.edit_message_text(
+            text=get_panel_text(), reply_markup=get_main_keyboard()
+        )
 
 
 # -------------------- INPUT PROCESSING HANDLER --------------------
@@ -947,172 +881,195 @@ async def callback_handler(client, callback_query: CallbackQuery):
 
 @app.on_message(filters.private & ~filters.command(["start"]))
 async def message_input_handler(client, message):
-  user_id = message.from_user.id
-  state = USER_STATES.get(user_id)
+    user_id = message.from_user.id
+    state = USER_STATES.get(user_id)
 
-  if not state or user_id not in ADMIN_IDS:
-    return
+    if not state or user_id not in ADMIN_IDS:
+        return
 
-  text = message.text.strip()
-  state_type = state.get("type") if isinstance(state, dict) else state
+    text = message.text.strip()
+    state_type = state.get("type") if isinstance(state, dict) else state
 
-  if state_type == "WAITING_FOR_SESSION":
-    try:
-      temp_client = Client(
-          "ubot_temp",
-          api_id=API_ID,
-          api_hash=API_HASH,
-          session_string=text,
-          in_memory=True,
-      )
-      await temp_client.start()
-      me = await temp_client.get_me()
-      USERBOT_SESSIONS[text] = temp_client
-
-      await sessions_col.update_one(
-          {"session": text},
-          {"$set": {"session": text, "user_id": me.id}},
-          upsert=True,
-      )
-
-      USER_STATES.pop(user_id, None)
-      await message.reply_text(
-          "✅ **Account Saved to MongoDB!**\n\n• Name:"
-          f" {me.first_name}\n• ID: <code>{me.id}</code>",
-          reply_markup=get_main_keyboard(),
-      )
-    except Exception as e:
-      await message.reply_text(
-          f"❌ **Invalid Session String:**\n`{str(e)}`\n\nDobara sahi string"
-          " session bhejein."
-      )
-
-  elif state_type == "WAITING_FOR_JOIN_LINK":
-    delay = float(state.get("delay", 2)) if isinstance(state, dict) else 2
-    speed_text = (
-        state.get("speed_text", "Normal") if isinstance(state, dict) else "Normal"
-    )
-
-    USER_STATES.pop(user_id, None)
-    msg = await message.reply_text(
-        f"⏳ **Joining Process Active**\n⚡ Rate Limit:"
-        f" `{speed_text}`\n\nKripya wait karein..."
-    )
-    joined, failed, reasons = 0, 0, []
-
-    total_accs = len(USERBOT_SESSIONS)
-    for idx, (session_str, ubot) in enumerate(USERBOT_SESSIONS.items(), 1):
-      ok, chat_obj, err_msg = await join_target_chat(ubot, text)
-      if ok:
-        joined += 1
-      else:
-        failed += 1
-        reasons.append(err_msg)
-
-      if idx < total_accs and delay > 0:
-        await asyncio.sleep(delay)
-
-    detail_text = (
-        f"✅ <b>Join Operation Complete</b>\n\n• Rate Limit:"
-        f" <code>{speed_text}</code>\n• Joined/Already in Chat: {joined}\n•"
-        f" Failed: {failed}"
-    )
-    if reasons:
-      detail_text += f"\n\n❌ <b>Error Detail:</b> {reasons[0]}"
-    await msg.edit_text(detail_text)
-
-  elif state_type == "WAITING_FOR_VC_LINK":
-    global ACTIVE_VC_COUNT, CURRENT_VC_CHAT
-    USER_STATES.pop(user_id, None)
-    msg = await message.reply_text("⏳ Connecting Voice Chat 24/7...")
-    connected, failed, vc_errors = 0, 0, []
-
-    CURRENT_VC_CHAT = text
-
-    for session_str, ubot in USERBOT_SESSIONS.items():
-      ok, err_msg = await join_vc_session(ubot, text)
-      if ok:
-        connected += 1
-      else:
-        failed += 1
-        vc_errors.append(err_msg)
-
-    ACTIVE_VC_COUNT = connected
-    resp_text = (
-        "🎙 <b>VC Join Status (24/7 Mode Active)</b>\n\n• Connected:"
-        f" {connected}\n• Failed: {failed}"
-    )
-    if vc_errors:
-      resp_text += f"\n\n⚠️ <b>Reason:</b> {vc_errors[0]}"
-    await msg.edit_text(resp_text)
-
-  elif state_type == "WAITING_FOR_POST_LINK":
-    USER_STATES.pop(user_id, None)
-    try:
-      parts = [p for p in text.split("/") if p]
-      msg_id = int(parts[-1])
-
-      if len(parts) >= 4 and parts[-3] == "c":
-        channel = int(f"-100{parts[-2]}")
-      else:
-        channel = parts[-2]
-
-      success = 0
-      for session_str, ubot in USERBOT_SESSIONS.items():
+    if state_type == "WAITING_FOR_SESSION":
         try:
-          await ubot.get_messages(channel, msg_id)
-          await ubot.send_reaction(channel, msg_id, "❤️")
-          success += 1
-        except Exception:
-          continue
+            temp_client = Client(
+                "ubot_temp",
+                api_id=API_ID,
+                api_hash=API_HASH,
+                session_string=text,
+                in_memory=True,
+            )
+            await temp_client.start()
+            me = await temp_client.get_me()
+            USERBOT_SESSIONS[text] = temp_client
 
-      if success == 0:
-        await message.reply_text(
-            "⚠️ **0 Reactions Sent!**\n\nPossible Reasons:\n1. Private channel"
-            " hai aur userbots abhi usme Joined NAHI hain (pehle JOIN CHANNEL"
-            " button se join karayein).\n2. Post link/ID galat hai.",
-            reply_markup=get_main_keyboard(),
+            await sessions_col.update_one(
+                {"session": text},
+                {"$set": {"session": text, "user_id": me.id}},
+                upsert=True,
+            )
+
+            USER_STATES.pop(user_id, None)
+            await message.reply_text(
+                "✅ **Account Saved to MongoDB!**\n\n• Name:"
+                f" {me.first_name}\n• ID: <code>{me.id}</code>",
+                reply_markup=get_main_keyboard(),
+            )
+        except Exception as e:
+            await message.reply_text(
+                f"❌ **Invalid Session String:**\n`{str(e)}`\n\nDobara sahi string"
+                " session bhejein."
+            )
+
+    elif state_type == "WAITING_FOR_JOIN_LINK":
+        time_sec = float(state.get("time_sec", 60))
+        rq_count = int(state.get("rq_count", 1))
+        speed_text = state.get("speed_text", "Normal")
+
+        USER_STATES.pop(user_id, None)
+        total_available = len(USERBOT_SESSIONS)
+
+        # 1. ACCOUNT COUNT VALIDATION
+        if rq_count > total_available:
+            await message.reply_text(
+                f"❌ **Order Cancelled:**\n\n"
+                f"Aapke paas sirf **{total_available}** active accounts hain!\n"
+                f"Aapne **{rq_count} Rq** select kiya tha.\n\n"
+                f"👉 Pehle aur accounts add karein ya kam Rq select karein.",
+                reply_markup=get_main_keyboard(),
+            )
+            return
+
+        # 2. DYNAMIC ORGANIC DELAY CALCULATOR
+        base_delay = time_sec / rq_count if rq_count > 0 else 2.0
+
+        msg = await message.reply_text(
+            f"⏳ **Joining Process Active**\n"
+            f"⚡ Rate/Option: `{speed_text}`\n"
+            f"👥 Target Accounts: `{rq_count}` / `{total_available}`\n\n"
+            f"Organic human delays ke saath operation chalu hai..."
         )
-      else:
-        await message.reply_text(
-            f"✅ Post par {success} Views + Reactions bhej diye gaye!",
-            reply_markup=get_main_keyboard(),
+
+        # 3. EXACT ACCOUNT SLICING
+        target_sessions = list(USERBOT_SESSIONS.items())[:rq_count]
+        joined, failed, reasons = 0, 0, []
+
+        for idx, (session_str, ubot) in enumerate(target_sessions, 1):
+            ok, chat_obj, err_msg = await join_target_chat(ubot, text)
+            if ok:
+                joined += 1
+            else:
+                failed += 1
+                reasons.append(err_msg)
+
+            # Natural organic variation delay
+            if idx < rq_count:
+                jitter = random.uniform(0.5, 2.5)
+                await asyncio.sleep(base_delay + jitter)
+
+        detail_text = (
+            f"✅ <b>Join Operation Complete</b>\n\n"
+            f"• Selected Option: <code>{speed_text}</code>\n"
+            f"• Exact Rq Sent: <b>{rq_count}</b>\n"
+            f"• Successful Joins: {joined}\n"
+            f"• Failed: {failed}"
         )
+        if reasons:
+            detail_text += f"\n\n❌ <b>Error Detail:</b> {reasons[0]}"
+        await msg.edit_text(detail_text)
 
-    except Exception as e:
-      await message.reply_text(
-          f"❌ Post Link Format galat hai!\nError: `{e}`",
-          reply_markup=get_main_keyboard(),
-      )
+    elif state_type == "WAITING_FOR_VC_LINK":
+        global ACTIVE_VC_COUNT, CURRENT_VC_CHAT
+        USER_STATES.pop(user_id, None)
+        msg = await message.reply_text("⏳ Connecting Voice Chat 24/7...")
+        connected, failed, vc_errors = 0, 0, []
 
-  elif state_type == "WAITING_FOR_ADMIN_ID":
-    if user_id == OWNER_ID and text.isdigit():
-      new_id = int(text)
-      ADMIN_IDS.add(new_id)
-      await admins_col.update_one(
-          {"user_id": new_id}, {"$set": {"user_id": new_id}}, upsert=True
-      )
+        CURRENT_VC_CHAT = text
 
-      USER_STATES.pop(user_id, None)
-      await message.reply_text(
-          f"✅ User ID <code>{new_id}</code> MongoDB me Admin save ho gaya.",
-          reply_markup=get_admin_menu_keyboard(),
-      )
-    else:
-      await message.reply_text("❌ Sahi numeric Telegram User ID bhejein.")
+        for session_str, ubot in USERBOT_SESSIONS.items():
+            ok, err_msg = await join_vc_session(ubot, text)
+            if ok:
+                connected += 1
+            else:
+                failed += 1
+                vc_errors.append(err_msg)
+
+        ACTIVE_VC_COUNT = connected
+        resp_text = (
+            "🎙 <b>VC Join Status (24/7 Mode Active)</b>\n\n• Connected:"
+            f" {connected}\n• Failed: {failed}"
+        )
+        if vc_errors:
+            resp_text += f"\n\n⚠️ <b>Reason:</b> {vc_errors[0]}"
+        await msg.edit_text(resp_text)
+
+    elif state_type == "WAITING_FOR_POST_LINK":
+        USER_STATES.pop(user_id, None)
+        try:
+            parts = [p for p in text.split("/") if p]
+            msg_id = int(parts[-1])
+
+            if len(parts) >= 4 and parts[-3] == "c":
+                channel = int(f"-100{parts[-2]}")
+            else:
+                channel = parts[-2]
+
+            success = 0
+            for session_str, ubot in USERBOT_SESSIONS.items():
+                try:
+                    await ubot.get_messages(channel, msg_id)
+                    await ubot.send_reaction(channel, msg_id, "❤️")
+                    success += 1
+                except Exception:
+                    continue
+
+            if success == 0:
+                await message.reply_text(
+                    "⚠️ **0 Reactions Sent!**\n\nPossible Reasons:\n1. Private channel"
+                    " hai aur userbots abhi usme Joined NAHI hain (pehle JOIN CHANNEL"
+                    " button se join karayein).\n2. Post link/ID galat hai.",
+                    reply_markup=get_main_keyboard(),
+                )
+            else:
+                await message.reply_text(
+                    f"✅ Post par {success} Views + Reactions bhej diye gaye!",
+                    reply_markup=get_main_keyboard(),
+                )
+
+        except Exception as e:
+            await message.reply_text(
+                f"❌ Post Link Format galat hai!\nError: `{e}`",
+                reply_markup=get_main_keyboard(),
+            )
+
+    elif state_type == "WAITING_FOR_ADMIN_ID":
+        if user_id == OWNER_ID and text.isdigit():
+            new_id = int(text)
+            ADMIN_IDS.add(new_id)
+            await admins_col.update_one(
+                {"user_id": new_id}, {"$set": {"user_id": new_id}}, upsert=True
+            )
+
+            USER_STATES.pop(user_id, None)
+            await message.reply_text(
+                f"✅ User ID <code>{new_id}</code> MongoDB me Admin save ho gaya.",
+                reply_markup=get_admin_menu_keyboard(),
+            )
+        else:
+            await message.reply_text("❌ Sahi numeric Telegram User ID bhejein.")
 
 
 # -------------------- BOT RUNNER WITH DB LOADER --------------------
 
 
 async def main():
-  await app.start()
-  await load_data_from_db()
-  asyncio.create_task(vc_keepalive_loop())
-  print("Sarkar_x_Nox_Bot is fully Started✅")
-  await asyncio.Event().wait()
+    await app.start()
+    await load_data_from_db()
+    asyncio.create_task(vc_keepalive_loop())
+    print("Sarkar_x_Nox_Bot is fully Started✅")
+    await asyncio.Event().wait()
 
 
 if __name__ == "__main__":
-  loop = asyncio.get_event_loop()
-  loop.run_until_complete(main())
+    loop = asyncio.get_event_loop()
+    loop.run_until_complete(main())
