@@ -426,6 +426,7 @@ async def callback_handler(client, callback_query: CallbackQuery):
         reply_markup=add_acc_keyboard,
     )
 
+  # STEP 1: MAIN DURATION CATEGORY MENU
   elif data == "join_channel":
     if not USERBOT_SESSIONS:
       await callback_query.answer(
@@ -434,23 +435,22 @@ async def callback_handler(client, callback_query: CallbackQuery):
       return
     await callback_query.answer()
 
-    # MULTIPLE SPEED OPTIONS (8 OPTIONS ADDED)
-    speed_keyboard = InlineKeyboardMarkup([
+    time_category_keyboard = InlineKeyboardMarkup([
         [
-            InlineKeyboardButton("🚀 30 Rq / Min", callback_data="speed_30m"),
-            InlineKeyboardButton("⚡ 20 Rq / Min", callback_data="speed_20m"),
+            InlineKeyboardButton(
+                "⏱️ 1 Minute Menu", callback_data="spcat_1m"
+            ),
+            InlineKeyboardButton(
+                "⏱️ 2 Minutes Menu", callback_data="spcat_2m"
+            ),
         ],
         [
-            InlineKeyboardButton("⚡ 10 Rq / Min", callback_data="speed_10m"),
-            InlineKeyboardButton("⚙️ 5 Rq / Min", callback_data="speed_5m"),
-        ],
-        [
-            InlineKeyboardButton("🐢 2 Rq / Min", callback_data="speed_2m"),
-            InlineKeyboardButton("⏱️ 1 Rq / Min", callback_data="speed_1m"),
-        ],
-        [
-            InlineKeyboardButton("⏳ 30 Rq / Hour", callback_data="speed_30h"),
-            InlineKeyboardButton("🐌 10 Rq / Hour", callback_data="speed_10h"),
+            InlineKeyboardButton(
+                "⏱️ 5 Minutes Menu", callback_data="spcat_5m"
+            ),
+            InlineKeyboardButton(
+                "⏱️ 1 Hour Menu", callback_data="spcat_1h"
+            ),
         ],
         [
             InlineKeyboardButton(
@@ -461,40 +461,250 @@ async def callback_handler(client, callback_query: CallbackQuery):
     await callback_query.edit_message_text(
         text=(
             "🚀 <b>Join Channel / Group</b>\n\n"
-            "⚡ <b>Pehle Joining Speed / Rate Limit select karein:</b>\n"
-            "Aap per minute ya per hour kitne accounts join karwana chahte"
-            " hain?"
+            "⏱️ <b>Time Category Choose Karein:</b>\n"
+            "Aap kitne time span me request set karna chahte hain?"
         ),
-        reply_markup=speed_keyboard,
+        reply_markup=time_category_keyboard,
     )
 
-  elif data.startswith("speed_"):
-    speed_code = data.split("_")[1]
-
-    # Speed dictionary setup
-    speed_config = {
-        "30m": {"delay": 2, "text": "30 Requests / Minute (Ultra Fast)"},
-        "20m": {"delay": 3, "text": "20 Requests / Minute (Fast)"},
-        "10m": {"delay": 6, "text": "10 Requests / Minute (Medium)"},
-        "5m": {"delay": 12, "text": "5 Requests / Minute (Safe)"},
-        "2m": {"delay": 30, "text": "2 Requests / Minute (Slow)"},
-        "1m": {"delay": 60, "text": "1 Request / Minute (Very Slow)"},
-        "30h": {"delay": 120, "text": "30 Requests / Hour (Ultra Safe)"},
-        "10h": {"delay": 360, "text": "10 Requests / Hour (Extreme Safe)"},
-    }
-    selected = speed_config.get(
-        speed_code, {"delay": 5, "text": "Default Speed"}
+  # STEP 2: EXPANDED NUMERICAL SUB-MENUS
+  elif data == "spcat_1m":
+    # 1 MINUTE SUB-MENU (1 to 15 Rq)
+    keyboard = InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton(
+                "⚡ 1 Rq", callback_data="spset_60_1 Rq / 1 Min"
+            ),
+            InlineKeyboardButton(
+                "⚡ 2 Rq", callback_data="spset_30_2 Rq / 1 Min"
+            ),
+            InlineKeyboardButton(
+                "⚡ 3 Rq", callback_data="spset_20_3 Rq / 1 Min"
+            ),
+        ],
+        [
+            InlineKeyboardButton(
+                "⚡ 4 Rq", callback_data="spset_15_4 Rq / 1 Min"
+            ),
+            InlineKeyboardButton(
+                "⚡ 5 Rq", callback_data="spset_12_5 Rq / 1 Min"
+            ),
+            InlineKeyboardButton(
+                "⚡ 6 Rq", callback_data="spset_10_6 Rq / 1 Min"
+            ),
+        ],
+        [
+            InlineKeyboardButton(
+                "⚡ 7 Rq", callback_data="spset_8.6_7 Rq / 1 Min"
+            ),
+            InlineKeyboardButton(
+                "⚡ 8 Rq", callback_data="spset_7.5_8 Rq / 1 Min"
+            ),
+            InlineKeyboardButton(
+                "⚡ 9 Rq", callback_data="spset_6.7_9 Rq / 1 Min"
+            ),
+        ],
+        [
+            InlineKeyboardButton(
+                "⚡ 10 Rq", callback_data="spset_6_10 Rq / 1 Min"
+            ),
+            InlineKeyboardButton(
+                "⚡ 12 Rq", callback_data="spset_5_12 Rq / 1 Min"
+            ),
+            InlineKeyboardButton(
+                "⚡ 15 Rq", callback_data="spset_4_15 Rq / 1 Min"
+            ),
+        ],
+        [
+            InlineKeyboardButton(
+                "⚡ 20 Rq", callback_data="spset_3_20 Rq / 1 Min"
+            ),
+            InlineKeyboardButton(
+                "⚡ 30 Rq", callback_data="spset_2_30 Rq / 1 Min"
+            ),
+        ],
+        [
+            InlineKeyboardButton(
+                "🔙 Back to Time Menu", callback_data="join_channel"
+            )
+        ],
+    ])
+    await callback_query.answer()
+    await callback_query.edit_message_text(
+        text=(
+            "⚡ <b>1 Minute Speed Options:</b>\n\n1 minute me exact kitne"
+            " accounts join karwane hain?"
+        ),
+        reply_markup=keyboard,
     )
+
+  elif data == "spcat_2m":
+    # 2 MINUTES SUB-MENU (1 to 10 Rq)
+    keyboard = InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton(
+                "⚙️ 1 Rq", callback_data="spset_120_1 Rq / 2 Min"
+            ),
+            InlineKeyboardButton(
+                "⚙️ 2 Rq", callback_data="spset_60_2 Rq / 2 Min"
+            ),
+            InlineKeyboardButton(
+                "⚙️ 3 Rq", callback_data="spset_40_3 Rq / 2 Min"
+            ),
+        ],
+        [
+            InlineKeyboardButton(
+                "⚙️ 4 Rq", callback_data="spset_30_4 Rq / 2 Min"
+            ),
+            InlineKeyboardButton(
+                "⚙️ 5 Rq", callback_data="spset_24_5 Rq / 2 Min"
+            ),
+            InlineKeyboardButton(
+                "⚙️ 6 Rq", callback_data="spset_20_6 Rq / 2 Min"
+            ),
+        ],
+        [
+            InlineKeyboardButton(
+                "⚙️ 7 Rq", callback_data="spset_17.1_7 Rq / 2 Min"
+            ),
+            InlineKeyboardButton(
+                "⚙️ 8 Rq", callback_data="spset_15_8 Rq / 2 Min"
+            ),
+            InlineKeyboardButton(
+                "⚙️ 10 Rq", callback_data="spset_12_10 Rq / 2 Min"
+            ),
+        ],
+        [
+            InlineKeyboardButton(
+                "🔙 Back to Time Menu", callback_data="join_channel"
+            )
+        ],
+    ])
+    await callback_query.answer()
+    await callback_query.edit_message_text(
+        text=(
+            "⚙️ <b>2 Minutes Speed Options:</b>\n\n2 minutes me kitne"
+            " requests (joins) bhejni hain?"
+        ),
+        reply_markup=keyboard,
+    )
+
+  elif data == "spcat_5m":
+    # 5 MINUTES SUB-MENU (1 to 30 Rq)
+    keyboard = InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton(
+                "🐢 1 Rq", callback_data="spset_300_1 Rq / 5 Min"
+            ),
+            InlineKeyboardButton(
+                "🐢 2 Rq", callback_data="spset_150_2 Rq / 5 Min"
+            ),
+            InlineKeyboardButton(
+                "🐢 3 Rq", callback_data="spset_100_3 Rq / 5 Min"
+            ),
+        ],
+        [
+            InlineKeyboardButton(
+                "🐢 5 Rq", callback_data="spset_60_5 Rq / 5 Min"
+            ),
+            InlineKeyboardButton(
+                "🐢 8 Rq", callback_data="spset_37.5_8 Rq / 5 Min"
+            ),
+            InlineKeyboardButton(
+                "🐢 10 Rq", callback_data="spset_30_10 Rq / 5 Min"
+            ),
+        ],
+        [
+            InlineKeyboardButton(
+                "🐢 15 Rq", callback_data="spset_20_15 Rq / 5 Min"
+            ),
+            InlineKeyboardButton(
+                "🐢 20 Rq", callback_data="spset_15_20 Rq / 5 Min"
+            ),
+            InlineKeyboardButton(
+                "🐢 25 Rq", callback_data="spset_12_25 Rq / 5 Min"
+            ),
+        ],
+        [
+            InlineKeyboardButton(
+                "🐢 30 Rq", callback_data="spset_10_30 Rq / 5 Min"
+            )
+        ],
+        [
+            InlineKeyboardButton(
+                "🔙 Back to Time Menu", callback_data="join_channel"
+            )
+        ],
+    ])
+    await callback_query.answer()
+    await callback_query.edit_message_text(
+        text="🐢 <b>5 Minutes Speed Options:</b>\n\nKitni requests set karni hain?",
+        reply_markup=keyboard,
+    )
+
+  elif data == "spcat_1h":
+    # 1 HOUR SUB-MENU
+    keyboard = InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton(
+                "⏱️ 1 Rq", callback_data="spset_3600_1 Rq / Hour"
+            ),
+            InlineKeyboardButton(
+                "⏱️ 5 Rq", callback_data="spset_720_5 Rq / Hour"
+            ),
+            InlineKeyboardButton(
+                "⏱️ 10 Rq", callback_data="spset_360_10 Rq / Hour"
+            ),
+        ],
+        [
+            InlineKeyboardButton(
+                "⏱️ 20 Rq", callback_data="spset_180_20 Rq / Hour"
+            ),
+            InlineKeyboardButton(
+                "⏱️ 30 Rq", callback_data="spset_120_30 Rq / Hour"
+            ),
+            InlineKeyboardButton(
+                "⏱️ 50 Rq", callback_data="spset_72_50 Rq / Hour"
+            ),
+        ],
+        [
+            InlineKeyboardButton(
+                "⏱️ 60 Rq", callback_data="spset_60_60 Rq / Hour"
+            ),
+            InlineKeyboardButton(
+                "⏱️ 100 Rq", callback_data="spset_36_100 Rq / Hour"
+            ),
+        ],
+        [
+            InlineKeyboardButton(
+                "🔙 Back to Time Menu", callback_data="join_channel"
+            )
+        ],
+    ])
+    await callback_query.answer()
+    await callback_query.edit_message_text(
+        text=(
+            "⏱️ <b>1 Hour Speed Options:</b>\n\n1 ghante me kitne requests"
+            " bhejna chahte hain?"
+        ),
+        reply_markup=keyboard,
+    )
+
+  # STEP 3: SAVE DELAY AND REQUEST LINK
+  elif data.startswith("spset_"):
+    parts = data.split("_", 2)
+    delay_val = float(parts[1])
+    speed_label = parts[2]
 
     USER_STATES[user_id] = {
         "type": "WAITING_FOR_JOIN_LINK",
-        "delay": selected["delay"],
-        "speed_text": selected["text"],
+        "delay": delay_val,
+        "speed_text": speed_label,
     }
     await callback_query.answer()
     await callback_query.edit_message_text(
         text=(
-            f"✅ <b>Selected Speed:</b> <code>{selected['text']}</code>\n\n"
+            f"✅ <b>Selected Rate Limit:</b> <code>{speed_label}</code>\n\n"
             "🚀 <b>Join Channel / Group</b>\n\n"
             "Public link (<code>https://t.me/name</code>) ya Private Invite Link"
             " (<code>https://t.me/+xxx</code>) send karein:"
@@ -778,14 +988,15 @@ async def message_input_handler(client, message):
       )
 
   elif state_type == "WAITING_FOR_JOIN_LINK":
-    delay = state.get("delay", 2) if isinstance(state, dict) else 2
+    delay = float(state.get("delay", 2)) if isinstance(state, dict) else 2
     speed_text = (
         state.get("speed_text", "Normal") if isinstance(state, dict) else "Normal"
     )
 
     USER_STATES.pop(user_id, None)
     msg = await message.reply_text(
-        f"⏳ **Joining Process Active** (Speed: `{speed_text}`)..."
+        f"⏳ **Joining Process Active**\n⚡ Rate Limit:"
+        f" `{speed_text}`\n\nKripya wait karein..."
     )
     joined, failed, reasons = 0, 0, []
 
@@ -798,12 +1009,11 @@ async def message_input_handler(client, message):
         failed += 1
         reasons.append(err_msg)
 
-      # Delay apply hoga next request bhejne se pehle
       if idx < total_accs and delay > 0:
         await asyncio.sleep(delay)
 
     detail_text = (
-        f"✅ <b>Join Operation Complete</b>\n\n• Speed:"
+        f"✅ <b>Join Operation Complete</b>\n\n• Rate Limit:"
         f" <code>{speed_text}</code>\n• Joined/Already in Chat: {joined}\n•"
         f" Failed: {failed}"
     )
