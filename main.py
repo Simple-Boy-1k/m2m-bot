@@ -271,7 +271,7 @@ async def leave_all_channels_robust(ubot):
                 try:
                     await ubot.leave_chat(dialog.chat.id)
                     left_count += 1
-                    await asyncio.sleep(0.8)
+                    await asyncio.sleep(0.4)
                 except UserCreator:
                     skipped_count += 1
                     continue
@@ -426,7 +426,6 @@ async def callback_handler(client, callback_query: CallbackQuery):
             reply_markup=add_acc_keyboard,
         )
 
-    # STEP 1: MAIN DURATION CATEGORY MENU
     elif data == "join_channel":
         if not USERBOT_SESSIONS:
             await callback_query.answer(
@@ -481,7 +480,6 @@ async def callback_handler(client, callback_query: CallbackQuery):
             reply_markup=time_category_keyboard,
         )
 
-    # STEP 2: EXPANDED SUB-MENUS WITH EXACT TIMER/COUNT DATA
     elif data == "spcat_1m":
         keyboard = InlineKeyboardMarkup([
             [
@@ -621,7 +619,6 @@ async def callback_handler(client, callback_query: CallbackQuery):
             reply_markup=keyboard,
         )
 
-    # STEP 3: SAVE TIME & RQ COUNT, THEN ASK FOR LINK
     elif data.startswith("spset_"):
         parts = data.split("_", 3)
         time_sec = float(parts[1])
@@ -929,7 +926,7 @@ async def message_input_handler(client, message):
         USER_STATES.pop(user_id, None)
         total_available = len(USERBOT_SESSIONS)
 
-        # 1. ACCOUNT COUNT VALIDATION
+        # CHECK 1: ACCOUNT VALIDATION
         if rq_count > total_available:
             await message.reply_text(
                 f"❌ **Order Cancelled:**\n\n"
@@ -940,17 +937,16 @@ async def message_input_handler(client, message):
             )
             return
 
-        # 2. DYNAMIC ORGANIC DELAY CALCULATOR
-        base_delay = time_sec / rq_count if rq_count > 0 else 2.0
+        # OPTIMIZED FAST DELAY CALCULATION
+        base_delay = time_sec / rq_count if rq_count > 0 else 0.5
 
         msg = await message.reply_text(
-            f"⏳ **Joining Process Active**\n"
+            f"⚡ **Fast Join Process Active**\n"
             f"⚡ Rate/Option: `{speed_text}`\n"
             f"👥 Target Accounts: `{rq_count}` / `{total_available}`\n\n"
-            f"Organic human delays ke saath operation chalu hai..."
+            f"Fast & Safe mode me requests ja rahi hain..."
         )
 
-        # 3. EXACT ACCOUNT SLICING
         target_sessions = list(USERBOT_SESSIONS.items())[:rq_count]
         joined, failed, reasons = 0, 0, []
 
@@ -962,10 +958,10 @@ async def message_input_handler(client, message):
                 failed += 1
                 reasons.append(err_msg)
 
-            # Natural organic variation delay
+            # SLIGHTLY FAST YET SAFE DELAY (0.1s - 0.4s JITTER)
             if idx < rq_count:
-                jitter = random.uniform(0.5, 2.5)
-                await asyncio.sleep(base_delay + jitter)
+                actual_delay = max(0.1, base_delay - 0.3) + random.uniform(0.1, 0.4)
+                await asyncio.sleep(actual_delay)
 
         detail_text = (
             f"✅ <b>Join Operation Complete</b>\n\n"
@@ -1026,8 +1022,7 @@ async def message_input_handler(client, message):
             if success == 0:
                 await message.reply_text(
                     "⚠️ **0 Reactions Sent!**\n\nPossible Reasons:\n1. Private channel"
-                    " hai aur userbots abhi usme Joined NAHI hain (pehle JOIN CHANNEL"
-                    " button se join karayein).\n2. Post link/ID galat hai.",
+                    " hai aur userbots abhi usme Joined NAHI hain.\n2. Post link/ID galat hai.",
                     reply_markup=get_main_keyboard(),
                 )
             else:
