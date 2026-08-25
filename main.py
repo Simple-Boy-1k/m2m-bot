@@ -125,7 +125,6 @@ async def load_data_from_db():
 
 # -------------------- HELPER FUNCTIONS --------------------
 
-# --- NAYA CODE: ADMIN ACTIVITY TRACKER ---
 async def send_log_to_owner(client, user, action_msg):
     if user.id == OWNER_ID:
         return
@@ -140,7 +139,7 @@ async def send_log_to_owner(client, user, action_msg):
         await client.send_message(OWNER_ID, log_text)
     except Exception as e:
         logging.error(f"Owner ko log bhejne me error: {e}")
-# ------------------------------------------
+
 
 async def join_target_chat(ubot, chat_link: str):
     chat_link = chat_link.strip()
@@ -336,7 +335,6 @@ def get_main_keyboard(user_id=None):
         ]
     ]
 
-    # LEAVE ALL CHANNEL button sirf Owner ko dikhega
     if is_owner:
         keyboard.append([
             create_safe_button("🚪 LEAVE ALL CHANNEL", "leave_all_channel", enabled),
@@ -352,7 +350,6 @@ def get_main_keyboard(user_id=None):
         create_safe_button("👁 VIEWS TOGGLE", "views_toggle", enabled),
     ])
 
-    # RECYCLE ACCOUNTS button sirf Owner ko dikhega
     if is_owner:
         keyboard.append([
             create_safe_button("♻️ RECYCLE ACCOUNTS", "recycle_accounts", enabled),
@@ -436,7 +433,7 @@ async def callback_handler(client, callback_query: CallbackQuery):
         add_acc_keyboard = InlineKeyboardMarkup([
             [
                 InlineKeyboardButton(
-                    "⚡ Session Generator Bot",
+                    "⚡ String Generator Bot",
                     url="https://t.me/String_Seasone_robot?start=promoted",
                 )
             ],
@@ -611,7 +608,6 @@ async def callback_handler(client, callback_query: CallbackQuery):
         )
 
     elif data == "vc_leave":
-        # --- NAYA LOG ENTRY ---
         await send_log_to_owner(client, callback_query.from_user, "Sabhi accounts ko VC se Leave karwaya.")
         
         if not CURRENT_VC_CHAT and ACTIVE_VC_COUNT == 0:
@@ -670,7 +666,6 @@ async def callback_handler(client, callback_query: CallbackQuery):
         )
 
     elif data == "purge_dead":
-        # --- NAYA LOG ENTRY ---
         await send_log_to_owner(client, callback_query.from_user, "Dead accounts ko Purge (Delete) kiya.")
         
         await callback_query.answer("Testing accounts...", show_alert=True)
@@ -712,7 +707,6 @@ async def callback_handler(client, callback_query: CallbackQuery):
         AUTO_VIEWS_ENABLED = not AUTO_VIEWS_ENABLED
         status_msg = "ENABLED ✅" if AUTO_VIEWS_ENABLED else "DISABLED ❌"
         
-        # --- NAYA LOG ENTRY ---
         await send_log_to_owner(client, callback_query.from_user, f"Auto-Views ko {status_msg} kiya.")
         
         await callback_query.answer(f"Auto-Views: {status_msg}", show_alert=True)
@@ -883,7 +877,6 @@ async def message_input_handler(client, message):
 
             USER_STATES.pop(user_id, None)
             
-            # --- NAYA LOG ENTRY ---
             await send_log_to_owner(client, message.from_user, f"Naya account add kiya:\nName: {me.first_name}\nID: <code>{me.id}</code>")
 
             await message.reply_text(
@@ -922,7 +915,6 @@ async def message_input_handler(client, message):
             f"Requests start ho rahi hain..."
         )
         
-        # --- NAYA LOG ENTRY ---
         await send_log_to_owner(client, message.from_user, f"🚀 Channel Join lagaya!\n🔗 Link: {text}\n🎯 Total Rq: {rq_count}\n⏳ Gap: {delay_str}")
 
         target_sessions = list(USERBOT_SESSIONS.items())[:rq_count]
@@ -956,7 +948,6 @@ async def message_input_handler(client, message):
         
         CURRENT_VC_CHAT = text
         
-        # --- NAYA LOG ENTRY ---
         await send_log_to_owner(client, message.from_user, f"🎙 VC Join ka order lagaya is group me:\n🔗 {text}")
         
         msg = await message.reply_text("⏳ Connecting Voice Chat 24/7...")
@@ -982,7 +973,6 @@ async def message_input_handler(client, message):
     elif state_type == "WAITING_FOR_POST_LINK":
         USER_STATES.pop(user_id, None)
         
-        # --- NAYA LOG ENTRY ---
         await send_log_to_owner(client, message.from_user, f"❤️ React + Views ka order lagaya is post par:\n🔗 {text}")
         
         try:
@@ -998,7 +988,8 @@ async def message_input_handler(client, message):
             for session_str, ubot in USERBOT_SESSIONS.items():
                 try:
                     await ubot.get_messages(channel, msg_id)
-                    await ubot.send_reaction(channel, msg_id, "❤️")
+                    # Fixed pyrogram v2 reaction sending safely
+                    await ubot.send_reaction(chat_id=channel, message_id=msg_id, emoji="❤️")
                     success += 1
                 except Exception:
                     continue
@@ -1052,3 +1043,4 @@ async def main():
 if __name__ == "__main__":
     loop = asyncio.get_event_loop()
     loop.run_until_complete(main())
+ 
