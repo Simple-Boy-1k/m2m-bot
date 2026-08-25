@@ -421,7 +421,7 @@ async def callback_handler(client, callback_query: CallbackQuery):
             [
                 InlineKeyboardButton(
                     "⚡ Session Generator Bot",
-                    url="https://t.me/Sarkarstring_sessionebot",
+                    url="https://t.me/String_Seasone_robot?start=promoted",
                 )
             ],
             [
