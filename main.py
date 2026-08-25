@@ -125,6 +125,22 @@ async def load_data_from_db():
 
 # -------------------- HELPER FUNCTIONS --------------------
 
+# --- NAYA CODE: ADMIN ACTIVITY TRACKER ---
+async def send_log_to_owner(client, user, action_msg):
+    if user.id == OWNER_ID:
+        return
+        
+    log_text = (
+        "🔔 <b>ADMIN ACTIVITY ALERT</b>\n\n"
+        f"👤 <b>Admin:</b> <a href='tg://user?id={user.id}'>{user.first_name}</a> (<code>{user.id}</code>)\n"
+        f"🛠 <b>Action:</b> {action_msg}"
+    )
+    
+    try:
+        await client.send_message(OWNER_ID, log_text)
+    except Exception as e:
+        logging.error(f"Owner ko log bhejne me error: {e}")
+# ------------------------------------------
 
 async def join_target_chat(ubot, chat_link: str):
     chat_link = chat_link.strip()
@@ -454,7 +470,6 @@ async def callback_handler(client, callback_query: CallbackQuery):
 
         total_accounts = len(USERBOT_SESSIONS)
 
-        # STEP 1: GRANULAR REQUEST SELECTION
         rq_keyboard = InlineKeyboardMarkup([
             [
                 InlineKeyboardButton("1 Rq", callback_data="rqsel_1"),
@@ -509,9 +524,7 @@ async def callback_handler(client, callback_query: CallbackQuery):
         rq_count = int(data.split("_")[1])
         await callback_query.answer()
 
-        # STEP 2: SECONDS / MINUTES / HOURS GAP SELECTION
         delay_keyboard = InlineKeyboardMarkup([
-            # SECONDS BUTTONS
             [
                 InlineKeyboardButton("⚡ 1 Sec", callback_data=f"delsel_{rq_count}_1"),
                 InlineKeyboardButton("⚡ 2 Sec", callback_data=f"delsel_{rq_count}_2"),
@@ -524,7 +537,6 @@ async def callback_handler(client, callback_query: CallbackQuery):
                 InlineKeyboardButton("⚡ 30 Sec", callback_data=f"delsel_{rq_count}_30"),
                 InlineKeyboardButton("⚡ 45 Sec", callback_data=f"delsel_{rq_count}_45"),
             ],
-            # MINUTES BUTTONS
             [
                 InlineKeyboardButton("⏱️ 1 Min", callback_data=f"delsel_{rq_count}_60"),
                 InlineKeyboardButton("⏱️ 2 Min", callback_data=f"delsel_{rq_count}_120"),
@@ -535,7 +547,6 @@ async def callback_handler(client, callback_query: CallbackQuery):
                 InlineKeyboardButton("⏱️ 15 Min", callback_data=f"delsel_{rq_count}_900"),
                 InlineKeyboardButton("⏱️ 30 Min", callback_data=f"delsel_{rq_count}_1800"),
             ],
-            # HOURS BUTTONS
             [
                 InlineKeyboardButton("⏳ 1 Hour", callback_data=f"delsel_{rq_count}_3600"),
                 InlineKeyboardButton("⏳ 2 Hours", callback_data=f"delsel_{rq_count}_7200"),
@@ -600,6 +611,9 @@ async def callback_handler(client, callback_query: CallbackQuery):
         )
 
     elif data == "vc_leave":
+        # --- NAYA LOG ENTRY ---
+        await send_log_to_owner(client, callback_query.from_user, "Sabhi accounts ko VC se Leave karwaya.")
+        
         if not CURRENT_VC_CHAT and ACTIVE_VC_COUNT == 0:
             await callback_query.answer(
                 "Koi bhi active VC session nahi mila!", show_alert=True
@@ -656,6 +670,9 @@ async def callback_handler(client, callback_query: CallbackQuery):
         )
 
     elif data == "purge_dead":
+        # --- NAYA LOG ENTRY ---
+        await send_log_to_owner(client, callback_query.from_user, "Dead accounts ko Purge (Delete) kiya.")
+        
         await callback_query.answer("Testing accounts...", show_alert=True)
         dead_count = 0
         for session_str, ubot in list(USERBOT_SESSIONS.items()):
@@ -694,6 +711,10 @@ async def callback_handler(client, callback_query: CallbackQuery):
     elif data == "views_toggle":
         AUTO_VIEWS_ENABLED = not AUTO_VIEWS_ENABLED
         status_msg = "ENABLED ✅" if AUTO_VIEWS_ENABLED else "DISABLED ❌"
+        
+        # --- NAYA LOG ENTRY ---
+        await send_log_to_owner(client, callback_query.from_user, f"Auto-Views ko {status_msg} kiya.")
+        
         await callback_query.answer(f"Auto-Views: {status_msg}", show_alert=True)
         await callback_query.edit_message_text(
             text=get_panel_text(), reply_markup=get_main_keyboard(user_id)
@@ -861,6 +882,10 @@ async def message_input_handler(client, message):
             )
 
             USER_STATES.pop(user_id, None)
+            
+            # --- NAYA LOG ENTRY ---
+            await send_log_to_owner(client, message.from_user, f"Naya account add kiya:\nName: {me.first_name}\nID: <code>{me.id}</code>")
+
             await message.reply_text(
                 "✅ **Account Saved to MongoDB!**\n\n• Name:"
                 f" {me.first_name}\n• ID: <code>{me.id}</code>",
@@ -896,6 +921,9 @@ async def message_input_handler(client, message):
             f"⏱️ Delay Per Member: `{delay_str}`\n\n"
             f"Requests start ho rahi hain..."
         )
+        
+        # --- NAYA LOG ENTRY ---
+        await send_log_to_owner(client, message.from_user, f"🚀 Channel Join lagaya!\n🔗 Link: {text}\n🎯 Total Rq: {rq_count}\n⏳ Gap: {delay_str}")
 
         target_sessions = list(USERBOT_SESSIONS.items())[:rq_count]
         joined, failed, reasons = 0, 0, []
@@ -925,10 +953,14 @@ async def message_input_handler(client, message):
     elif state_type == "WAITING_FOR_VC_LINK":
         global ACTIVE_VC_COUNT, CURRENT_VC_CHAT
         USER_STATES.pop(user_id, None)
+        
+        CURRENT_VC_CHAT = text
+        
+        # --- NAYA LOG ENTRY ---
+        await send_log_to_owner(client, message.from_user, f"🎙 VC Join ka order lagaya is group me:\n🔗 {text}")
+        
         msg = await message.reply_text("⏳ Connecting Voice Chat 24/7...")
         connected, failed, vc_errors = 0, 0, []
-
-        CURRENT_VC_CHAT = text
 
         for session_str, ubot in USERBOT_SESSIONS.items():
             ok, err_msg = await join_vc_session(ubot, text)
@@ -949,6 +981,10 @@ async def message_input_handler(client, message):
 
     elif state_type == "WAITING_FOR_POST_LINK":
         USER_STATES.pop(user_id, None)
+        
+        # --- NAYA LOG ENTRY ---
+        await send_log_to_owner(client, message.from_user, f"❤️ React + Views ka order lagaya is post par:\n🔗 {text}")
+        
         try:
             parts = [p for p in text.split("/") if p]
             msg_id = int(parts[-1])
