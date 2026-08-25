@@ -434,7 +434,7 @@ async def callback_handler(client, callback_query: CallbackQuery):
             text=(
                 "<b>➕ Add Account</b>\n\n"
                 "📌 <b>String Session Kaise Nikalein:</b>\n"
-                "1️⃣ Pehle @Sarkarstring_sessionebot par jayein.\n"
+                "1️⃣ Pehle @String_Seasone_robot par jayein.\n"
                 "2️⃣ Bot me <code>/start</code> dabayein aur <b>Pyrogram V2</b>"
                 " select karein.\n"
                 "3️⃣ Apna Number, OTP aur 2FA Password daal kar Session String"
