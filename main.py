@@ -2,6 +2,7 @@ import asyncio
 import logging
 import os
 import random
+import re
 import motor.motor_asyncio
 from pyrogram import Client, filters
 from pyrogram.enums import ChatType
@@ -16,6 +17,7 @@ from pyrogram.errors import (
     UserCreator,
     UserDeactivated,
     UsernameInvalid,
+    RPCError
 )
 from pyrogram.raw import functions, types
 from pyrogram.types import (
@@ -154,13 +156,21 @@ async def join_target_chat(ubot, chat_link: str):
             return True, None, "Already Joined"
     except InviteRequestSent:
         return True, None, "Request Sent (Admin Approval Pending) ⏳"
+    except FloodWait as e:
+        return False, None, f"Telegram Limit ({e.value}s Wait Required)"
     except Exception as e:
         err_msg = str(e)
+        if "FLOOD_WAIT" in err_msg:
+            match = re.search(r'\d+', err_msg)
+            sec = match.group() if match else "165"
+            return False, None, f"Telegram Limit ({sec}s Wait Required)"
         if "USER_ALREADY_PARTICIPANT" in err_msg:
             return True, None, "Already Joined"
         if "INVITE_REQUEST_SENT" in err_msg:
             return True, None, "Request Sent (Admin Approval Pending) ⏳"
-        return False, None, err_msg
+        if "INVITE_HASH_EXPIRED" in err_msg:
+            return False, None, "Invite Link Expired / Invalid"
+        return False, None, "Telegram Limit / Network Issue"
 
 
 async def join_vc_session(ubot, chat_link: str):
@@ -259,17 +269,7 @@ async def leave_vc_all():
 async def vc_keepalive_loop():
     global ACTIVE_VC_COUNT
     while True:
-        await asyncio.sleep(15)
-        if CURRENT_VC_CHAT and USERBOT_SESSIONS:
-            connected = 0
-            for session_str, ubot in list(USERBOT_SESSIONS.items()):
-                try:
-                    ok, _ = await join_vc_session(ubot, CURRENT_VC_CHAT)
-                    if ok:
-                        connected += 1
-                except Exception:
-                    pass
-            ACTIVE_VC_COUNT = connected
+        await asyncio.sleep(60)
 
 
 async def leave_all_channels_robust(ubot):
@@ -926,7 +926,8 @@ async def message_input_handler(client, message):
                 joined += 1
             else:
                 failed += 1
-                reasons.append(err_msg)
+                if err_msg not in reasons:
+                    reasons.append(err_msg)
 
             if idx < rq_count:
                 await asyncio.sleep(delay_sec)
@@ -950,7 +951,7 @@ async def message_input_handler(client, message):
         
         await send_log_to_owner(client, message.from_user, f"🎙 VC Join ka order lagaya is group me:\n🔗 {text}")
         
-        msg = await message.reply_text("⏳ Connecting Voice Chat 24/7...")
+        msg = await message.reply_text("⏳ Connecting Voice Chat...")
         connected, failed, vc_errors = 0, 0, []
 
         for session_str, ubot in USERBOT_SESSIONS.items():
@@ -963,7 +964,7 @@ async def message_input_handler(client, message):
 
         ACTIVE_VC_COUNT = connected
         resp_text = (
-            "🎙 <b>VC Join Status (24/7 Mode Active)</b>\n\n• Connected:"
+            "🎙 <b>VC Join Status</b>\n\n• Connected:"
             f" {connected}\n• Failed: {failed}"
         )
         if vc_errors:
@@ -988,7 +989,6 @@ async def message_input_handler(client, message):
             for session_str, ubot in USERBOT_SESSIONS.items():
                 try:
                     await ubot.get_messages(channel, msg_id)
-                    # Fixed pyrogram v2 reaction sending safely
                     await ubot.send_reaction(chat_id=channel, message_id=msg_id, emoji="❤️")
                     success += 1
                 except Exception:
