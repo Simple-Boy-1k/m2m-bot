@@ -3,8 +3,6 @@ import logging
 import os
 import random
 import re
-import aiofiles
-import aiohttp
 import motor.motor_asyncio
 from pyrogram import Client, filters
 from pyrogram.enums import ChatType
@@ -79,68 +77,8 @@ USERBOT_SESSIONS = {}
 ACTIVE_VC_COUNT = 0
 CURRENT_VC_CHAT = None
 AUTO_VIEWS_ENABLED = True
-AUTO_NAME_ENABLED = False
-AUTO_DP_ENABLED = False
 ONLINE_247_ENABLED = True
 USER_STATES = {}
-
-# ==================== DYNAMIC REAL NAMES ENGINE (NO NUMBERS, NO EMOJIS) ====================
-BOY_FIRST_NAMES = [
-    "Aarav", "Vivaan", "Aditya", "Vihaan", "Arjun", "Sai", "Reyansh", "Ayaan", 
-    "Krishna", "Ishaan", "Dhruv", "Kabir", "Rudra", "Advait", "Rahul", "Amit", 
-    "Rohit", "Vikas", "Sandeep", "Deepak", "Karan", "Vikram", "Suraj", "Mohit", 
-    "Aman", "Ravi", "Alok", "Manish", "Abhishek", "Shivam", "Saurabh", "Varun", 
-    "Nikhil", "Gaurav", "Yash", "Aniket", "Harsh", "Prateek", "Ayush", "Rishabh", 
-    "Mayank", "Kartik", "Pankaj", "Raju", "Babu", "Sanjay", "Nitin", "Sameer", "Vijay"
-]
-
-GIRL_FIRST_NAMES = [
-    "Ananya", "Diya", "Saanvi", "Pari", "Anvi", "Riya", "Meera", "Neha", 
-    "Pooja", "Priya", "Sneha", "Kajal", "Kavya", "Simran", "Aarti", "Muskan", 
-    "Shreya", "Nisha", "Divya", "Khushi", "Isha", "Megha", "Suman", "Payal", 
-    "Ritu", "Tanya", "Swati", "Shikha", "Preeti", "Komal", "Sonam", "Monika"
-]
-
-LAST_NAMES = [
-    "Sharma", "Verma", "Gupta", "Mishra", "Singh", "Kumar", "Patel", "Reddy", 
-    "Joshi", "Mehta", "Yadav", "Chauhan", "Malhotra", "Saxena", "Das", "Thakur", 
-    "Nair", "Roy", "Sinha", "Jha", "Pandey", "Tripathi", "Tiwari", "Deshmukh",
-    "Rathore", "Agarwal", "Bhasin", "Kapoor", "Khanna", "Choudhary", "Dubey",
-    "Puri", "Kulkarni", "Bhatt", "Shukla", "Pandit", "Rao", "Narang", "Rajput"
-]
-
-# Unique Names Tracker to avoid duplicates across all accounts
-USED_NAMES = set()
-
-def generate_unique_name(gender: str = "boy") -> str:
-    """Generate 100% unique realistic name without numbers or emojis"""
-    first_pool = GIRL_FIRST_NAMES if gender == "girl" else BOY_FIRST_NAMES
-    
-    for _ in range(2000):  # Search up to 2000 random combinations
-        fname = random.choice(first_pool)
-        lname = random.choice(LAST_NAMES)
-        
-        # Real Human Styling variations
-        styles = [
-            f"{fname} {lname}",                   # Normal: Rahul Sharma
-            f"{fname} {lname}",                   # Standard Name
-            f"{fname} {lname[0]}.",                # Short Last Name: Rahul S.
-            f"{fname[0]}. {lname}",                # Short First Name: R. Sharma
-            f"{fname.upper()} {lname.upper()}",    # Capital: RAHUL SHARMA
-            f"{fname}",                            # Single Name: Rahul
-            f"{fname.upper()}"                     # Single Capital: RAHUL
-        ]
-        
-        selected_name = random.choice(styles)
-        
-        if selected_name not in USED_NAMES:
-            USED_NAMES.add(selected_name)
-            return selected_name
-            
-    # Fallback to unique indexed name if pool gets exhausted
-    fallback = f"{random.choice(first_pool)} {random.choice(LAST_NAMES)}"
-    USED_NAMES.add(fallback)
-    return fallback
 
 app = Client(
     "account_manager_bot",
@@ -148,60 +86,6 @@ app = Client(
     api_hash=API_HASH,
     bot_token=BOT_TOKEN,
 )
-
-# -------------------- REAL PHOTO & NAME AUTOMATION --------------------
-
-async def download_real_dp(gender: str, session_id: str):
-    """Downloads realistic human profile picture"""
-    gender_path = "women" if gender == "girl" else "men"
-    photo_id = random.randint(1, 95)
-    url = f"https://randomuser.me/api/portraits/{gender_path}/{photo_id}.jpg"
-    file_path = f"temp_dp_{session_id}.jpg"
-
-    try:
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url, timeout=10) as resp:
-                if resp.status == 200:
-                    f = await aiofiles.open(file_path, mode='wb')
-                    await f.write(await resp.read())
-                    await f.close()
-                    return file_path
-    except Exception as e:
-        logging.error(f"DP Download Error: {e}")
-    return None
-
-
-async def auto_profile_updater_loop():
-    """Background loop to sync matching DP & Unique Name based on Gender"""
-    while True:
-        await asyncio.sleep(1800)  # Runs every 30 minutes
-        if (AUTO_NAME_ENABLED or AUTO_DP_ENABLED) and USERBOT_SESSIONS:
-            logging.info("Auto DP & Name Sync Task Running...")
-
-            for s_str, data in list(USERBOT_SESSIONS.items()):
-                try:
-                    ubot = data["client"]
-                    gender = random.choice(["boy", "girl"])
-                    
-                    if AUTO_DP_ENABLED:
-                        dp_file = await download_real_dp(gender, data.get("user_id", random.randint(1000, 9999)))
-                        if dp_file:
-                            try:
-                                await ubot.set_profile_photo(photo=dp_file)
-                            except Exception as photo_err:
-                                logging.error(f"DP Set Error: {photo_err}")
-                            finally:
-                                if os.path.exists(dp_file):
-                                    os.remove(dp_file)
-
-                    if AUTO_NAME_ENABLED:
-                        matched_name = generate_unique_name(gender)
-                        await ubot.update_profile(first_name=matched_name)
-                        data["name"] = matched_name
-
-                    await asyncio.sleep(3)
-                except Exception as e:
-                    logging.error(f"Auto Profile Update Error for {data.get('phone')}: {e}")
 
 # -------------------- DATABASE LOADER --------------------
 
@@ -228,10 +112,6 @@ async def load_data_from_db():
             await ubot.start()
             me = await ubot.get_me()
             phone_num = f"+{me.phone_number}" if me.phone_number else f"ID: {me.id}"
-            
-            # Track current name to avoid duplication
-            if me.first_name:
-                USED_NAMES.add(me.first_name)
             
             USERBOT_SESSIONS[session_str] = {
                 "client": ubot,
@@ -441,8 +321,6 @@ def build_delay_buttons(rq_count):
 
 def get_panel_text():
     views_st = "ENABLED ✅" if AUTO_VIEWS_ENABLED else "DISABLED ❌"
-    name_st = "ACTIVE 🔤" if AUTO_NAME_ENABLED else "OFF ❌"
-    dp_st = "ACTIVE 🖼" if AUTO_DP_ENABLED else "OFF ❌"
     presence_st = "ONLINE 24/7 🟢" if ONLINE_247_ENABLED else "OFF 🔴"
 
     return (
@@ -454,8 +332,6 @@ def get_panel_text():
         f"├ 🎙 <b>Active VC IDs :</b> <code>{ACTIVE_VC_COUNT}</code>\n"
         f"├ 🛡 <b>System Admins :</b> <code>{len(ADMIN_IDS)}</code>\n"
         f"├ 👁 <b>Auto-Views :</b> {views_st}\n"
-        f"├ 🔤 <b>Auto Name :</b> {name_st}\n"
-        f"├ 🖼 <b>Auto DP :</b> {dp_st}\n"
         f"└ 🌐 <b>Presence :</b> {presence_st}\n\n"
         "✨ <b>Neeche Menu se Category choose karein:</b>"
     )
@@ -480,6 +356,9 @@ def get_main_keyboard(user_id=None):
         [
             create_safe_button("🔐 Admin Security", "menu_admin", enabled),
             create_safe_button("🔄 Refresh Panel", "action_refresh", enabled),
+        ],
+        [
+            InlineKeyboardButton("👑 Owner Contact", url=f"tg://user?id={OWNER_ID}")
         ]
     ]
 
@@ -509,7 +388,7 @@ async def start_handler(client, message):
 
 @app.on_callback_query()
 async def callback_handler(client, callback_query: CallbackQuery):
-    global AUTO_VIEWS_ENABLED, AUTO_NAME_ENABLED, AUTO_DP_ENABLED, ONLINE_247_ENABLED, ACTIVE_VC_COUNT
+    global AUTO_VIEWS_ENABLED, ONLINE_247_ENABLED, ACTIVE_VC_COUNT
     user_id = callback_query.from_user.id
 
     if user_id not in ADMIN_IDS:
@@ -760,13 +639,9 @@ async def callback_handler(client, callback_query: CallbackQuery):
     # 5. AUTOMATION MENU
     elif data == "menu_automation":
         await callback_query.answer()
-        n_st = "ON ✅" if AUTO_NAME_ENABLED else "OFF ❌"
-        dp_st = "ON ✅" if AUTO_DP_ENABLED else "OFF ❌"
         p_st = "24/7 ONLINE ✅" if ONLINE_247_ENABLED else "OFF 🔴"
 
         auto_kb = InlineKeyboardMarkup([
-            [InlineKeyboardButton(f"🔤 Gender Matched Auto Name: {n_st}", callback_data="auto_toggle_name")],
-            [InlineKeyboardButton(f"🖼 Real Photo Auto DP: {dp_st}", callback_data="auto_toggle_dp")],
             [InlineKeyboardButton(f"🟢 24/7 Presence: {p_st}", callback_data="auto_toggle_presence")],
             [InlineKeyboardButton("🔙 Back to Main Menu", callback_data="back_to_main")]
         ])
@@ -774,24 +649,6 @@ async def callback_handler(client, callback_query: CallbackQuery):
             text="🤖 <b>PROFILE AUTOMATION HUB</b>\n\nAutomation Features Toggle Karein:",
             reply_markup=auto_kb
         )
-
-    elif data == "auto_toggle_name":
-        AUTO_NAME_ENABLED = not AUTO_NAME_ENABLED
-        await callback_query.answer(f"Auto Name: {'ENABLED ✅' if AUTO_NAME_ENABLED else 'DISABLED ❌'}", show_alert=True)
-        await callback_handler(client, CallbackQuery(
-            id=callback_query.id, from_user=callback_query.from_user,
-            chat_instance=callback_query.chat_instance, message=callback_query.message,
-            data="menu_automation"
-        ))
-
-    elif data == "auto_toggle_dp":
-        AUTO_DP_ENABLED = not AUTO_DP_ENABLED
-        await callback_query.answer(f"Real Photo Auto DP: {'ENABLED ✅' if AUTO_DP_ENABLED else 'DISABLED ❌'}", show_alert=True)
-        await callback_handler(client, CallbackQuery(
-            id=callback_query.id, from_user=callback_query.from_user,
-            chat_instance=callback_query.chat_instance, message=callback_query.message,
-            data="menu_automation"
-        ))
 
     elif data == "auto_toggle_presence":
         ONLINE_247_ENABLED = not ONLINE_247_ENABLED
@@ -1091,9 +948,6 @@ async def message_input_handler(client, message):
 async def main():
     await app.start()
     await load_data_from_db()
-    
-    # Start Background Loop for Auto Gender DP + Dynamic Unique Name Sync
-    asyncio.create_task(auto_profile_updater_loop())
     
     print("WINEX Control Panel Bot Fully Started ✅")
     await asyncio.Event().wait()
