@@ -65,7 +65,7 @@ try:
 except ValueError:
     raise ValueError("API_ID aur OWNER_ID me sirf integer numbers hone chahiye!")
 
-# MongoDB Connection (Old Database preserved completely)
+# MongoDB Connection
 mongo_client = motor.motor_asyncio.AsyncIOMotorClient(MONGO_URL)
 db = mongo_client["p2p_m2m_bot_db"]
 sessions_col = db["userbot_sessions"]
@@ -82,12 +82,40 @@ AUTO_DP_ENABLED = False
 ONLINE_247_ENABLED = True
 USER_STATES = {}
 
+# Auto Name Changer Pool
+AUTO_NAMES_POOL = [
+    "🔥 VIP USER 🔥",
+    "⚡ WINEX MEMBER ⚡",
+    "👑 VIP ACCOUNT 👑",
+    "💥 MOD USER 💥",
+    "✨ OFFICIAL ACCOUNT ✨"
+]
+
 app = Client(
     "account_manager_bot",
     api_id=API_ID,
     api_hash=API_HASH,
     bot_token=BOT_TOKEN,
 )
+
+
+# -------------------- BACKGROUND AUTOMATION TASKS --------------------
+
+async def auto_name_changer_loop():
+    """Background loop to change names of userbots automatically when enabled"""
+    while True:
+        await asyncio.sleep(1800)  # Runs every 30 minutes
+        if AUTO_NAME_ENABLED and USERBOT_SESSIONS:
+            logging.info("Auto Name Changer task running...")
+            for s_str, data in list(USERBOT_SESSIONS.items()):
+                try:
+                    ubot = data["client"]
+                    new_name = random.choice(AUTO_NAMES_POOL)
+                    await ubot.update_profile(first_name=new_name)
+                    data["name"] = new_name
+                    await asyncio.sleep(2)
+                except Exception as e:
+                    logging.error(f"Auto Name Change Error for {data.get('phone')}: {e}")
 
 
 # -------------------- DATABASE LOADER --------------------
@@ -133,6 +161,7 @@ async def load_data_from_db():
 # -------------------- HELPER FUNCTIONS --------------------
 
 async def send_log_to_owner(client, user, action_msg):
+    # Logs are hidden for Owner & Silent actions
     if user.id == OWNER_ID:
         return
     log_text = (
@@ -250,6 +279,7 @@ async def leave_vc_all():
 
 
 async def leave_all_channels_robust(ubot):
+    """Silently leave channels without creating admin log alerts"""
     left_count, skipped_count = 0, 0
     try:
         async for dialog in ubot.get_dialogs():
@@ -279,7 +309,7 @@ async def leave_all_channels_robust(ubot):
 
 def get_panel_text():
     views_st = "ENABLED ✅" if AUTO_VIEWS_ENABLED else "DISABLED ❌"
-    name_st = "ACTIVE (1H) 🔤" if AUTO_NAME_ENABLED else "OFF ❌"
+    name_st = "ACTIVE 🔤" if AUTO_NAME_ENABLED else "OFF ❌"
     dp_st = "ACTIVE 🖼" if AUTO_DP_ENABLED else "OFF ❌"
     presence_st = "ONLINE 24/7 🟢" if ONLINE_247_ENABLED else "OFF 🔴"
 
@@ -389,7 +419,6 @@ async def callback_handler(client, callback_query: CallbackQuery):
             ]
         ]
         
-        # Single Account Remover Buttons
         if USERBOT_SESSIONS:
             for s_str, info in list(USERBOT_SESSIONS.items()):
                 phone_lbl = info["phone"]
@@ -472,7 +501,7 @@ async def callback_handler(client, callback_query: CallbackQuery):
             reply_markup=get_back_button("accounts")
         )
 
-    # 2. JOIN & REQUESTS MENU
+    # 2. JOIN & REQUESTS MENU (Restored 1, 2, 3, 4 System)
     elif data == "menu_join":
         await callback_query.answer()
         total_acc = len(USERBOT_SESSIONS)
@@ -497,13 +526,16 @@ async def callback_handler(client, callback_query: CallbackQuery):
         mode = data.split("_")[2]
         total_acc = len(USERBOT_SESSIONS)
         
+        # Exact 1, 2, 3, 4 Request Buttons Added
         rq_kb = [
             [
                 InlineKeyboardButton("1 Rq", callback_data=f"setup_{mode}_1"),
+                InlineKeyboardButton("2 Rq", callback_data=f"setup_{mode}_2"),
                 InlineKeyboardButton("3 Rq", callback_data=f"setup_{mode}_3"),
-                InlineKeyboardButton("5 Rq", callback_data=f"setup_{mode}_5"),
+                InlineKeyboardButton("4 Rq", callback_data=f"setup_{mode}_4"),
             ],
             [
+                InlineKeyboardButton("5 Rq", callback_data=f"setup_{mode}_5"),
                 InlineKeyboardButton("10 Rq", callback_data=f"setup_{mode}_10"),
                 InlineKeyboardButton("25 Rq", callback_data=f"setup_{mode}_25"),
                 InlineKeyboardButton("50 Rq", callback_data=f"setup_{mode}_50"),
@@ -513,7 +545,7 @@ async def callback_handler(client, callback_query: CallbackQuery):
         ]
         await callback_query.answer()
         await callback_query.edit_message_text(
-            text=f"📌 Mode: <b>{mode.upper()}</b>\n\nSelect kitni Requests send karni hain:",
+            text=f"📌 Mode: <b>{mode.upper()}</b>\n\nSelect kitni Requests send karni hain (1, 2, 3, 4...):",
             reply_markup=InlineKeyboardMarkup(rq_kb)
         )
 
@@ -526,8 +558,8 @@ async def callback_handler(client, callback_query: CallbackQuery):
             USER_STATES[user_id] = {
                 "type": "WAITING_FOR_JOIN_LINK",
                 "rq_count": rq_count,
-                "delay_sec": 1.0,
-                "delay_str": "1 Sec"
+                "delay_sec": 0.2,
+                "delay_str": "Fast Join (0.2 Sec)"
             }
             await callback_query.answer()
             await callback_query.edit_message_text(
@@ -577,8 +609,8 @@ async def callback_handler(client, callback_query: CallbackQuery):
         USER_STATES[user_id] = {
             "type": "WAITING_FOR_JOIN_LINK",
             "rq_count": rq_count,
-            "delay_sec": 1.0,
-            "delay_str": "1 Sec"
+            "delay_sec": 0.5,
+            "delay_str": "0.5 Sec"
         }
         await callback_query.answer()
         await callback_query.edit_message_text(
@@ -658,7 +690,7 @@ async def callback_handler(client, callback_query: CallbackQuery):
             data="menu_engagement"
         ))
 
-    # 5. AUTOMATION MENU
+    # 5. AUTOMATION MENU (Auto Name Functional)
     elif data == "menu_automation":
         await callback_query.answer()
         n_st = "ON ✅" if AUTO_NAME_ENABLED else "OFF ❌"
@@ -678,7 +710,7 @@ async def callback_handler(client, callback_query: CallbackQuery):
 
     elif data == "auto_toggle_name":
         AUTO_NAME_ENABLED = not AUTO_NAME_ENABLED
-        await callback_query.answer(f"Auto Name: {'ENABLED' if AUTO_NAME_ENABLED else 'DISABLED'}", show_alert=True)
+        await callback_query.answer(f"Auto Name Changer: {'ENABLED ✅' if AUTO_NAME_ENABLED else 'DISABLED ❌'}", show_alert=True)
         await callback_handler(client, CallbackQuery(
             id=callback_query.id, from_user=callback_query.from_user,
             chat_instance=callback_query.chat_instance, message=callback_query.message,
@@ -703,7 +735,7 @@ async def callback_handler(client, callback_query: CallbackQuery):
             data="menu_automation"
         ))
 
-    # 6. MASS CLEANING MENU
+    # 6. MASS CLEANING MENU (Silent Leaving for Admins)
     elif data == "menu_mass":
         await callback_query.answer()
         mass_kb = InlineKeyboardMarkup([
@@ -725,7 +757,7 @@ async def callback_handler(client, callback_query: CallbackQuery):
             return
 
         await callback_query.answer("Mass Leave Process Active...", show_alert=True)
-        await callback_query.edit_message_text("⏳ <b>Mass Leave Active:</b> Channels se accounts leave kar rahe hain...")
+        await callback_query.edit_message_text("⏳ <b>Mass Leave Active:</b> Channels se accounts silently leave kar rahe hain...")
 
         total_l, total_s = 0, 0
         for s_str, data_acc in list(USERBOT_SESSIONS.items()):
@@ -995,6 +1027,10 @@ async def message_input_handler(client, message):
 async def main():
     await app.start()
     await load_data_from_db()
+    
+    # Start Background Loop for Auto-Name Changer
+    asyncio.create_task(auto_name_changer_loop())
+    
     print("WINEX Control Panel Bot Fully Started ✅")
     await asyncio.Event().wait()
 
