@@ -358,7 +358,6 @@ def get_main_keyboard(user_id=None):
             create_safe_button("🔄 Refresh Panel", "action_refresh", enabled),
         ],
         [
-            # Owner contact username updated here
             InlineKeyboardButton("👑 Owner Contact", url="https://t.me/Simple_Boy_1k")
         ]
     ]
@@ -411,35 +410,54 @@ async def callback_handler(client, callback_query: CallbackQuery):
             text=get_panel_text(), reply_markup=get_main_keyboard(user_id)
         )
 
-    # 1. ACCOUNT HUB MENU
+    # 1. ACCOUNT HUB MENU (Admins can view, but remove/add options shown strictly to Owner)
     elif data == "menu_accounts":
         await callback_query.answer()
-        kb = [
-            [
+        kb = []
+        
+        # Add and Purge buttons only for Owner
+        if user_id == OWNER_ID:
+            kb.append([
                 InlineKeyboardButton("➕ Add Account", callback_data="act_add_acc"),
                 InlineKeyboardButton("🔔 Purge Dead", callback_data="act_purge_dead")
-            ]
-        ]
-        
+            ])
+
         if USERBOT_SESSIONS:
             for s_str, info in list(USERBOT_SESSIONS.items()):
                 phone_lbl = info["phone"]
-                kb.append([
-                    InlineKeyboardButton(f"❌ Remove {phone_lbl}", callback_data=f"delacc_{hash(s_str)}")
-                ])
+                if user_id == OWNER_ID:
+                    # Owner gets the remove option button
+                    kb.append([
+                        InlineKeyboardButton(f"❌ Remove {phone_lbl}", callback_data=f"delacc_{hash(s_str)}")
+                    ])
+                else:
+                    # Normal Admins only see the account info in a non-clickable/info button (no remove option)
+                    kb.append([
+                        InlineKeyboardButton(f"📱 {phone_lbl} (Active)", callback_data="none_action")
+                    ])
                 
         kb.append([InlineKeyboardButton("🔙 Back to Main Menu", callback_data="back_to_main")])
 
+        panel_title = "📁 <b>ACCOUNT HUB MANAGEMENT (OWNER VIEW)</b>" if user_id == OWNER_ID else "📁 <b>ACCOUNT HUB (ADMIN VIEW - READ ONLY)</b>"
+        sub_text = "📌 Kisi specific account ko remove karne ke liye ❌ par click karein:" if user_id == OWNER_ID else "📋 Yahan aap connected accounts ki list dekh sakte hain:"
+
         await callback_query.edit_message_text(
             text=(
-                "📁 <b>ACCOUNT HUB MANAGEMENT</b>\n\n"
+                f"{panel_title}\n\n"
                 f"📊 Total Active Connected IDs: <code>{len(USERBOT_SESSIONS)}</code>\n\n"
-                "📌 Kisi specific account ko remove karne ke liye ❌ par click karein:"
+                f"{sub_text}"
             ),
             reply_markup=InlineKeyboardMarkup(kb)
         )
 
+    elif data == "none_action":
+        await callback_query.answer("Yeh option sirf Owner ke liye available hai!", show_alert=True)
+
     elif data.startswith("delacc_"):
+        if user_id != OWNER_ID:
+            await callback_query.answer("⛔ Access Denied!", show_alert=True)
+            return
+
         target_hash = data.split("_")[1]
         removed_phone = None
         for s_str, info in list(USERBOT_SESSIONS.items()):
@@ -465,6 +483,10 @@ async def callback_handler(client, callback_query: CallbackQuery):
         ))
 
     elif data == "act_add_acc":
+        if user_id != OWNER_ID:
+            await callback_query.answer("⛔ Access Denied!", show_alert=True)
+            return
+
         USER_STATES[user_id] = "WAITING_FOR_SESSION"
         await callback_query.answer()
         add_kb = InlineKeyboardMarkup([
@@ -482,6 +504,10 @@ async def callback_handler(client, callback_query: CallbackQuery):
         )
 
     elif data == "act_purge_dead":
+        if user_id != OWNER_ID:
+            await callback_query.answer("⛔ Access Denied!", show_alert=True)
+            return
+
         await send_log_to_owner(client, callback_query.from_user, "Dead Accounts Clean Up Kiya")
         await callback_query.answer("Testing all sessions...", show_alert=True)
         dead_count = 0
@@ -660,8 +686,12 @@ async def callback_handler(client, callback_query: CallbackQuery):
             data="menu_automation"
         ))
 
-    # 6. MASS CLEANING MENU
+    # 6. MASS CLEANING MENU (Owner Only)
     elif data == "menu_mass":
+        if user_id != OWNER_ID:
+            await callback_query.answer("⛔ Yeh section sirf Main Owner ke liye hai!", show_alert=True)
+            return
+
         await callback_query.answer()
         mass_kb = InlineKeyboardMarkup([
             [InlineKeyboardButton("🚪 Leave All Channels / Groups", callback_data="mass_leave_channels")],
@@ -669,7 +699,7 @@ async def callback_handler(client, callback_query: CallbackQuery):
             [InlineKeyboardButton("🔙 Back to Main Menu", callback_data="back_to_main")]
         ])
         await callback_query.edit_message_text(
-            text="🧹 <b>MASS CLEANING & RESTART TOOLS</b>\n\nMass Action Select Karein:",
+            text="🧹 <b>MASS CLEANING & RESTART TOOLS (OWNER ONLY)</b>\n\nMass Action Select Karein:",
             reply_markup=mass_kb
         )
 
@@ -802,6 +832,10 @@ async def message_input_handler(client, message):
     state_type = state.get("type") if isinstance(state, dict) else state
 
     if state_type == "WAITING_FOR_SESSION":
+        if user_id != OWNER_ID:
+            USER_STATES.pop(user_id, None)
+            return
+
         try:
             temp_client = Client(
                 f"ubot_{random.randint(1000,9999)}",
