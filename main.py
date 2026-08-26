@@ -84,20 +84,63 @@ AUTO_DP_ENABLED = False
 ONLINE_247_ENABLED = True
 USER_STATES = {}
 
-# REALISTIC NAMES POOLS (WITHOUT EMOJIS/SYMBOLS)
-BOY_NAMES = [
-    "Raju Kumar", "Babu Sharma", "Rahul Verma", "Vikas Singh", "Aman Gupta",
-    "Karan Malhotra", "Rohan Mehta", "Deepak Kumar", "Abhishek Singh", "Sanjay Verma",
-    "Pankaj Roy", "Aakash Patel", "Rohit Mishra", "Nitin Raj", "Suraj Sharma",
-    "Aditya Joshi", "Sameer Khan", "Vijay Kumar", "Rishi Verma", "Shivam Singh"
+# ==================== DYNAMIC REAL NAMES ENGINE (NO NUMBERS, NO EMOJIS) ====================
+BOY_FIRST_NAMES = [
+    "Aarav", "Vivaan", "Aditya", "Vihaan", "Arjun", "Sai", "Reyansh", "Ayaan", 
+    "Krishna", "Ishaan", "Dhruv", "Kabir", "Rudra", "Advait", "Rahul", "Amit", 
+    "Rohit", "Vikas", "Sandeep", "Deepak", "Karan", "Vikram", "Suraj", "Mohit", 
+    "Aman", "Ravi", "Alok", "Manish", "Abhishek", "Shivam", "Saurabh", "Varun", 
+    "Nikhil", "Gaurav", "Yash", "Aniket", "Harsh", "Prateek", "Ayush", "Rishabh", 
+    "Mayank", "Kartik", "Pankaj", "Raju", "Babu", "Sanjay", "Nitin", "Sameer", "Vijay"
 ]
 
-GIRL_NAMES = [
-    "Priya Sharma", "Neha Verma", "Anjali Singh", "Pooja Gupta", "Riya Sen",
-    "Kavya Patel", "Sneha Roy", "Simran Kaur", "Aarti Mishra", "Muskan Khan",
-    "Shreya Das", "Nisha Sharma", "Divya Rajput", "Khushi Mehta", "Isha Verma",
-    "Megha Singh", "Suman Raj", "Payal Jain", "Ritu Kumari", "Tanya Kapoor"
+GIRL_FIRST_NAMES = [
+    "Ananya", "Diya", "Saanvi", "Pari", "Anvi", "Riya", "Meera", "Neha", 
+    "Pooja", "Priya", "Sneha", "Kajal", "Kavya", "Simran", "Aarti", "Muskan", 
+    "Shreya", "Nisha", "Divya", "Khushi", "Isha", "Megha", "Suman", "Payal", 
+    "Ritu", "Tanya", "Swati", "Shikha", "Preeti", "Komal", "Sonam", "Monika"
 ]
+
+LAST_NAMES = [
+    "Sharma", "Verma", "Gupta", "Mishra", "Singh", "Kumar", "Patel", "Reddy", 
+    "Joshi", "Mehta", "Yadav", "Chauhan", "Malhotra", "Saxena", "Das", "Thakur", 
+    "Nair", "Roy", "Sinha", "Jha", "Pandey", "Tripathi", "Tiwari", "Deshmukh",
+    "Rathore", "Agarwal", "Bhasin", "Kapoor", "Khanna", "Choudhary", "Dubey",
+    "Puri", "Kulkarni", "Bhatt", "Shukla", "Pandit", "Rao", "Narang", "Rajput"
+]
+
+# Unique Names Tracker to avoid duplicates across all accounts
+USED_NAMES = set()
+
+def generate_unique_name(gender: str = "boy") -> str:
+    """Generate 100% unique realistic name without numbers or emojis"""
+    first_pool = GIRL_FIRST_NAMES if gender == "girl" else BOY_FIRST_NAMES
+    
+    for _ in range(2000):  # Search up to 2000 random combinations
+        fname = random.choice(first_pool)
+        lname = random.choice(LAST_NAMES)
+        
+        # Real Human Styling variations
+        styles = [
+            f"{fname} {lname}",                   # Normal: Rahul Sharma
+            f"{fname} {lname}",                   # Standard Name
+            f"{fname} {lname[0]}.",                # Short Last Name: Rahul S.
+            f"{fname[0]}. {lname}",                # Short First Name: R. Sharma
+            f"{fname.upper()} {lname.upper()}",    # Capital: RAHUL SHARMA
+            f"{fname}",                            # Single Name: Rahul
+            f"{fname.upper()}"                     # Single Capital: RAHUL
+        ]
+        
+        selected_name = random.choice(styles)
+        
+        if selected_name not in USED_NAMES:
+            USED_NAMES.add(selected_name)
+            return selected_name
+            
+    # Fallback to unique indexed name if pool gets exhausted
+    fallback = f"{random.choice(first_pool)} {random.choice(LAST_NAMES)}"
+    USED_NAMES.add(fallback)
+    return fallback
 
 app = Client(
     "account_manager_bot",
@@ -105,7 +148,6 @@ app = Client(
     api_hash=API_HASH,
     bot_token=BOT_TOKEN,
 )
-
 
 # -------------------- REAL PHOTO & NAME AUTOMATION --------------------
 
@@ -116,18 +158,21 @@ async def download_real_dp(gender: str, session_id: str):
     url = f"https://randomuser.me/api/portraits/{gender_path}/{photo_id}.jpg"
     file_path = f"temp_dp_{session_id}.jpg"
 
-    async with aiohttp.ClientSession() as session:
-        async with session.get(url) as resp:
-            if resp.status == 200:
-                f = await aiofiles.open(file_path, mode='wb')
-                await f.write(await resp.read())
-                await f.close()
-                return file_path
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, timeout=10) as resp:
+                if resp.status == 200:
+                    f = await aiofiles.open(file_path, mode='wb')
+                    await f.write(await resp.read())
+                    await f.close()
+                    return file_path
+    except Exception as e:
+        logging.error(f"DP Download Error: {e}")
     return None
 
 
 async def auto_profile_updater_loop():
-    """Background loop to sync matching DP & Name based on Gender"""
+    """Background loop to sync matching DP & Unique Name based on Gender"""
     while True:
         await asyncio.sleep(1800)  # Runs every 30 minutes
         if (AUTO_NAME_ENABLED or AUTO_DP_ENABLED) and USERBOT_SESSIONS:
@@ -150,14 +195,13 @@ async def auto_profile_updater_loop():
                                     os.remove(dp_file)
 
                     if AUTO_NAME_ENABLED:
-                        matched_name = random.choice(GIRL_NAMES if gender == "girl" else BOY_NAMES)
+                        matched_name = generate_unique_name(gender)
                         await ubot.update_profile(first_name=matched_name)
                         data["name"] = matched_name
 
                     await asyncio.sleep(3)
                 except Exception as e:
                     logging.error(f"Auto Profile Update Error for {data.get('phone')}: {e}")
-
 
 # -------------------- DATABASE LOADER --------------------
 
@@ -185,6 +229,10 @@ async def load_data_from_db():
             me = await ubot.get_me()
             phone_num = f"+{me.phone_number}" if me.phone_number else f"ID: {me.id}"
             
+            # Track current name to avoid duplication
+            if me.first_name:
+                USED_NAMES.add(me.first_name)
+            
             USERBOT_SESSIONS[session_str] = {
                 "client": ubot,
                 "phone": phone_num,
@@ -197,7 +245,6 @@ async def load_data_from_db():
             await sessions_col.delete_one({"session": session_str})
 
     logging.info(f"Database Sync Complete! Restored {loaded_count} accounts & {len(ADMIN_IDS)} admins.")
-
 
 # -------------------- HELPER FUNCTIONS --------------------
 
@@ -343,7 +390,6 @@ async def leave_all_channels_robust(ubot):
         logging.error(f"Leave Channels Error: {e}")
     return left_count, skipped_count
 
-
 # -------------------- KEYBOARD GENERATORS --------------------
 
 def build_rq_buttons(total_acc):
@@ -390,7 +436,6 @@ def build_delay_buttons(rq_count):
         
     keyboard.append([InlineKeyboardButton("🔙 Back to Request Selection", callback_data="menu_join")])
     return InlineKeyboardMarkup(keyboard)
-
 
 # -------------------- DASHBOARD & TEXT FORMATTERS --------------------
 
@@ -447,7 +492,6 @@ def get_back_button(target_menu="main"):
         InlineKeyboardButton("🔙 Back to Menu", callback_data=cb_data)
     ]])
 
-
 # -------------------- COMMAND HANDLER --------------------
 
 @app.on_message(filters.command("start") & filters.private)
@@ -460,7 +504,6 @@ async def start_handler(client, message):
     await message.reply_text(
         text=get_panel_text(), reply_markup=get_main_keyboard(user_id)
     )
-
 
 # -------------------- CALLBACK QUERY HANDLER --------------------
 
@@ -812,7 +855,7 @@ async def callback_handler(client, callback_query: CallbackQuery):
             reply_markup=get_back_button("mass")
         )
 
-    # 7. ADMIN SECURITY PANEL (Remove Admin Only Visible to Main Owner)
+    # 7. ADMIN SECURITY PANEL
     elif data == "menu_admin":
         await callback_query.answer()
         
@@ -886,7 +929,6 @@ async def callback_handler(client, callback_query: CallbackQuery):
             text=admin_text,
             reply_markup=get_back_button("admin")
         )
-
 
 # -------------------- MESSAGE INPUT HANDLER --------------------
 
@@ -1044,14 +1086,13 @@ async def message_input_handler(client, message):
         else:
             await message.reply_text("❌ Valid Numeric Telegram User ID Bhejein.")
 
-
 # -------------------- BOT RUNNER --------------------
 
 async def main():
     await app.start()
     await load_data_from_db()
     
-    # Start Background Loop for Auto Gender DP + Name Sync
+    # Start Background Loop for Auto Gender DP + Dynamic Unique Name Sync
     asyncio.create_task(auto_profile_updater_loop())
     
     print("WINEX Control Panel Bot Fully Started ✅")
