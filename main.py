@@ -3,6 +3,8 @@ import logging
 import os
 import random
 import re
+import aiofiles
+import aiohttp
 import motor.motor_asyncio
 from pyrogram import Client, filters
 from pyrogram.enums import ChatType
@@ -73,7 +75,7 @@ admins_col = db["bot_admins"]
 
 # Global Storage
 ADMIN_IDS = {OWNER_ID}
-USERBOT_SESSIONS = {}  # Format: {session_str: {"client": ubot, "phone": phone, "name": name, "user_id": uid}}
+USERBOT_SESSIONS = {}
 ACTIVE_VC_COUNT = 0
 CURRENT_VC_CHAT = None
 AUTO_VIEWS_ENABLED = True
@@ -82,13 +84,19 @@ AUTO_DP_ENABLED = False
 ONLINE_247_ENABLED = True
 USER_STATES = {}
 
-# Auto Name Changer Pool
-AUTO_NAMES_POOL = [
-    "🔥 VIP USER 🔥",
-    "⚡ WINEX MEMBER ⚡",
-    "👑 VIP ACCOUNT 👑",
-    "💥 MOD USER 💥",
-    "✨ OFFICIAL ACCOUNT ✨"
+# REALISTIC NAMES POOLS (WITHOUT EMOJIS/SYMBOLS)
+BOY_NAMES = [
+    "Raju Kumar", "Babu Sharma", "Rahul Verma", "Vikas Singh", "Aman Gupta",
+    "Karan Malhotra", "Rohan Mehta", "Deepak Kumar", "Abhishek Singh", "Sanjay Verma",
+    "Pankaj Roy", "Aakash Patel", "Rohit Mishra", "Nitin Raj", "Suraj Sharma",
+    "Aditya Joshi", "Sameer Khan", "Vijay Kumar", "Rishi Verma", "Shivam Singh"
+]
+
+GIRL_NAMES = [
+    "Priya Sharma", "Neha Verma", "Anjali Singh", "Pooja Gupta", "Riya Sen",
+    "Kavya Patel", "Sneha Roy", "Simran Kaur", "Aarti Mishra", "Muskan Khan",
+    "Shreya Das", "Nisha Sharma", "Divya Rajput", "Khushi Mehta", "Isha Verma",
+    "Megha Singh", "Suman Raj", "Payal Jain", "Ritu Kumari", "Tanya Kapoor"
 ]
 
 app = Client(
@@ -99,30 +107,66 @@ app = Client(
 )
 
 
-# -------------------- BACKGROUND AUTOMATION TASKS --------------------
+# -------------------- REAL PHOTO & NAME AUTOMATION --------------------
 
-async def auto_name_changer_loop():
-    """Background loop to change names of userbots automatically when enabled"""
+async def download_real_dp(gender: str, session_id: str):
+    """Downloads realistic human profile picture"""
+    gender_path = "women" if gender == "girl" else "men"
+    photo_id = random.randint(1, 95)
+    url = f"https://randomuser.me/api/portraits/{gender_path}/{photo_id}.jpg"
+    file_path = f"temp_dp_{session_id}.jpg"
+
+    async with aiohttp.ClientSession() as session:
+        async with session.get(url) as resp:
+            if resp.status == 200:
+                f = await aiofiles.open(file_path, mode='wb')
+                await f.write(await resp.read())
+                await f.close()
+                return file_path
+    return None
+
+
+async def auto_profile_updater_loop():
+    """Background loop to sync matching DP & Name based on Gender"""
     while True:
         await asyncio.sleep(1800)  # Runs every 30 minutes
-        if AUTO_NAME_ENABLED and USERBOT_SESSIONS:
-            logging.info("Auto Name Changer task running...")
+        if (AUTO_NAME_ENABLED or AUTO_DP_ENABLED) and USERBOT_SESSIONS:
+            logging.info("Auto DP & Name Sync Task Running...")
+
             for s_str, data in list(USERBOT_SESSIONS.items()):
                 try:
                     ubot = data["client"]
-                    new_name = random.choice(AUTO_NAMES_POOL)
-                    await ubot.update_profile(first_name=new_name)
-                    data["name"] = new_name
-                    await asyncio.sleep(2)
+                    # Randomly pick gender for account
+                    gender = random.choice(["boy", "girl"])
+                    
+                    # 1. Update Real DP if enabled
+                    if AUTO_DP_ENABLED:
+                        dp_file = await download_real_dp(gender, data.get("user_id", random.randint(1000, 9999)))
+                        if dp_file:
+                            try:
+                                await ubot.set_profile_photo(photo=dp_file)
+                            except Exception as photo_err:
+                                logging.error(f"DP Set Error: {photo_err}")
+                            finally:
+                                if os.path.exists(dp_file):
+                                    os.remove(dp_file)
+
+                    # 2. Update Matching Name (Girl DP -> Girl Name / Boy DP -> Boy Name)
+                    if AUTO_NAME_ENABLED:
+                        matched_name = random.choice(GIRL_NAMES if gender == "girl" else BOY_NAMES)
+                        await ubot.update_profile(first_name=matched_name)
+                        data["name"] = matched_name
+
+                    await asyncio.sleep(3)
                 except Exception as e:
-                    logging.error(f"Auto Name Change Error for {data.get('phone')}: {e}")
+                    logging.error(f"Auto Profile Update Error for {data.get('phone')}: {e}")
 
 
 # -------------------- DATABASE LOADER --------------------
 
 async def load_data_from_db():
     global ADMIN_IDS, USERBOT_SESSIONS
-    logging.info("MongoDB se purana database load ho raha hai...")
+    logging.info("MongoDB se database load ho raha hai...")
 
     async for admin_doc in admins_col.find():
         ADMIN_IDS.add(int(admin_doc["user_id"]))
@@ -306,12 +350,11 @@ async def leave_all_channels_robust(ubot):
 # -------------------- KEYBOARD GENERATORS --------------------
 
 def build_rq_buttons(total_acc):
-    """Generates 1, 2, 3... N buttons dynamically for all available accounts"""
     keyboard = []
     row = []
     for i in range(1, total_acc + 1):
         row.append(InlineKeyboardButton(f"{i} Rq", callback_data=f"selrq_{i}"))
-        if len(row) == 4:  # 4 buttons per row
+        if len(row) == 4:
             keyboard.append(row)
             row = []
     if row:
@@ -322,7 +365,6 @@ def build_rq_buttons(total_acc):
 
 
 def build_delay_buttons(rq_count):
-    """Generates wide delay choices up to 1 Hour (seconds & minutes)"""
     delays = [
         ("⚡ 2 Sec", 2),
         ("⚡ 5 Sec", 5),
@@ -343,7 +385,7 @@ def build_delay_buttons(rq_count):
     row = []
     for label, sec in delays:
         row.append(InlineKeyboardButton(label, callback_data=f"delsel_{rq_count}_{sec}"))
-        if len(row) == 3:  # 3 buttons per row
+        if len(row) == 3:
             keyboard.append(row)
             row = []
     if row:
@@ -379,7 +421,6 @@ def get_panel_text():
 
 def get_main_keyboard(user_id=None):
     enabled = BUTTON_COLOUR
-    is_owner = (user_id == OWNER_ID)
 
     keyboard = [
         [
@@ -393,18 +434,12 @@ def get_main_keyboard(user_id=None):
         [
             create_safe_button("🤖 Profile Auto", "menu_automation", enabled),
             create_safe_button("🧹 Mass Cleaning", "menu_mass", enabled),
-        ]
-    ]
-
-    if is_owner:
-        keyboard.append([
+        ],
+        [
             create_safe_button("🔐 Admin Security", "menu_admin", enabled),
             create_safe_button("🔄 Refresh Panel", "action_refresh", enabled),
-        ])
-    else:
-        keyboard.append([
-            create_safe_button("🔄 Refresh Panel", "action_refresh", enabled),
-        ])
+        ]
+    ]
 
     return InlineKeyboardMarkup(keyboard)
 
@@ -443,7 +478,6 @@ async def callback_handler(client, callback_query: CallbackQuery):
 
     data = callback_query.data
 
-    # MAIN NAVIGATION & REFRESH
     if data == "back_to_main":
         USER_STATES.pop(user_id, None)
         await callback_query.answer()
@@ -549,7 +583,7 @@ async def callback_handler(client, callback_query: CallbackQuery):
             reply_markup=get_back_button("accounts")
         )
 
-    # 2. JOIN & REQUESTS MENU (Dynamic 1 to N buttons & Delay up to 1 hr)
+    # 2. JOIN & REQUESTS MENU
     elif data == "menu_join":
         await callback_query.answer()
         total_acc = len(USERBOT_SESSIONS)
@@ -565,7 +599,7 @@ async def callback_handler(client, callback_query: CallbackQuery):
             text=(
                 "⚡ <b>JOIN & REQUESTS HUB</b>\n\n"
                 f"👥 Total Available Userbots: <code>{total_acc}</code>\n\n"
-                "👉 Kitni Requests (Accounts) join karwani hain select karein (1 se jitne accounts hain sab ka button hai):"
+                "👉 Kitni Requests (Accounts) join karwani hain select karein:"
             ),
             reply_markup=build_rq_buttons(total_acc)
         )
@@ -691,8 +725,8 @@ async def callback_handler(client, callback_query: CallbackQuery):
         p_st = "24/7 ONLINE ✅" if ONLINE_247_ENABLED else "OFF 🔴"
 
         auto_kb = InlineKeyboardMarkup([
-            [InlineKeyboardButton(f"🔤 Auto Name Changer: {n_st}", callback_data="auto_toggle_name")],
-            [InlineKeyboardButton(f"🖼 Auto DP Rotator: {dp_st}", callback_data="auto_toggle_dp")],
+            [InlineKeyboardButton(f"🔤 Gender Matched Auto Name: {n_st}", callback_data="auto_toggle_name")],
+            [InlineKeyboardButton(f"🖼 Real Photo Auto DP: {dp_st}", callback_data="auto_toggle_dp")],
             [InlineKeyboardButton(f"🟢 24/7 Presence: {p_st}", callback_data="auto_toggle_presence")],
             [InlineKeyboardButton("🔙 Back to Main Menu", callback_data="back_to_main")]
         ])
@@ -703,7 +737,7 @@ async def callback_handler(client, callback_query: CallbackQuery):
 
     elif data == "auto_toggle_name":
         AUTO_NAME_ENABLED = not AUTO_NAME_ENABLED
-        await callback_query.answer(f"Auto Name Changer: {'ENABLED ✅' if AUTO_NAME_ENABLED else 'DISABLED ❌'}", show_alert=True)
+        await callback_query.answer(f"Auto Name: {'ENABLED ✅' if AUTO_NAME_ENABLED else 'DISABLED ❌'}", show_alert=True)
         await callback_handler(client, CallbackQuery(
             id=callback_query.id, from_user=callback_query.from_user,
             chat_instance=callback_query.chat_instance, message=callback_query.message,
@@ -712,7 +746,7 @@ async def callback_handler(client, callback_query: CallbackQuery):
 
     elif data == "auto_toggle_dp":
         AUTO_DP_ENABLED = not AUTO_DP_ENABLED
-        await callback_query.answer(f"Auto DP: {'ENABLED' if AUTO_DP_ENABLED else 'DISABLED'}", show_alert=True)
+        await callback_query.answer(f"Real Photo Auto DP: {'ENABLED ✅' if AUTO_DP_ENABLED else 'DISABLED ❌'}", show_alert=True)
         await callback_handler(client, CallbackQuery(
             id=callback_query.id, from_user=callback_query.from_user,
             chat_instance=callback_query.chat_instance, message=callback_query.message,
@@ -781,27 +815,28 @@ async def callback_handler(client, callback_query: CallbackQuery):
             reply_markup=get_back_button("mass")
         )
 
-    # 7. ADMIN SECURITY PANEL
+    # 7. ADMIN SECURITY PANEL (Remove Admin Only Visible to Main Owner)
     elif data == "menu_admin":
-        if user_id != OWNER_ID:
-            await callback_query.answer("⛔ Only Main Owner can manage Admin Security!", show_alert=True)
-            return
         await callback_query.answer()
-        adm_kb = InlineKeyboardMarkup([
-            [
-                InlineKeyboardButton("➕ Add Admin", callback_data="adm_add_prompt"),
-                InlineKeyboardButton("➖ Remove Admin", callback_data="adm_rem_prompt")
-            ],
-            [InlineKeyboardButton("📜 Active Admin List", callback_data="adm_list")],
-            [InlineKeyboardButton("🔙 Back to Main Menu", callback_data="back_to_main")]
-        ])
+        
+        adm_buttons = [
+            [InlineKeyboardButton("➕ Add Admin", callback_data="adm_add_prompt")]
+        ]
+        
+        if user_id == OWNER_ID:
+            adm_buttons[0].append(InlineKeyboardButton("➖ Remove Admin", callback_data="adm_rem_prompt"))
+
+        adm_buttons.append([InlineKeyboardButton("📜 Active Admin List", callback_data="adm_list")])
+        adm_buttons.append([InlineKeyboardButton("🔙 Back to Main Menu", callback_data="back_to_main")])
+
         await callback_query.edit_message_text(
             text="🔐 <b>ADMIN SECURITY CONTROL</b>\n\nManage Bot Access & System Admins:",
-            reply_markup=adm_kb
+            reply_markup=InlineKeyboardMarkup(adm_buttons)
         )
 
     elif data == "adm_add_prompt":
         if user_id != OWNER_ID:
+            await callback_query.answer("⛔ Sirf Main Owner Add kar sakta hai!", show_alert=True)
             return
         USER_STATES[user_id] = "WAITING_FOR_ADMIN_ID"
         await callback_query.answer()
@@ -812,7 +847,9 @@ async def callback_handler(client, callback_query: CallbackQuery):
 
     elif data == "adm_rem_prompt":
         if user_id != OWNER_ID:
+            await callback_query.answer("⛔ Sirf Main Owner Remove kar sakta hai!", show_alert=True)
             return
+        
         rem_buttons = []
         for aid in ADMIN_IDS:
             if aid != OWNER_ID:
@@ -830,6 +867,7 @@ async def callback_handler(client, callback_query: CallbackQuery):
 
     elif data.startswith("removeadm_"):
         if user_id != OWNER_ID:
+            await callback_query.answer("⛔ Sirf Main Owner hi Admin remove kar sakta hai!", show_alert=True)
             return
         target_id = int(data.split("_")[1])
         if target_id in ADMIN_IDS:
@@ -866,7 +904,6 @@ async def message_input_handler(client, message):
     text = message.text.strip()
     state_type = state.get("type") if isinstance(state, dict) else state
 
-    # New Account Session Input
     if state_type == "WAITING_FOR_SESSION":
         try:
             temp_client = Client(
@@ -903,7 +940,6 @@ async def message_input_handler(client, message):
         except Exception as e:
             await message.reply_text(f"❌ <b>Invalid Session String:</b>\n`{str(e)}`\n\nDobara sahi string session send karein.")
 
-    # Join Link Processing
     elif state_type == "WAITING_FOR_JOIN_LINK":
         rq_count = int(state.get("rq_count", 1))
         delay_sec = float(state.get("delay_sec", 1.0))
@@ -951,7 +987,6 @@ async def message_input_handler(client, message):
             res_text += f"\n\n❌ <b>Reason:</b> {error_logs[0]}"
         await msg.edit_text(res_text, reply_markup=get_main_keyboard(user_id))
 
-    # VC Join Target
     elif state_type == "WAITING_FOR_VC_LINK":
         global ACTIVE_VC_COUNT, CURRENT_VC_CHAT
         USER_STATES.pop(user_id, None)
@@ -976,7 +1011,6 @@ async def message_input_handler(client, message):
             resp_t += f"\n\n⚠️ <b>Detail:</b> {vc_errs[0]}"
         await msg.edit_text(resp_t, reply_markup=get_main_keyboard(user_id))
 
-    # Post Link For React + Views
     elif state_type == "WAITING_FOR_POST_LINK":
         USER_STATES.pop(user_id, None)
         await send_log_to_owner(client, message.from_user, f"❤️ React + Views Order: {text}")
@@ -1003,7 +1037,6 @@ async def message_input_handler(client, message):
         except Exception as e:
             await message.reply_text(f"❌ <b>Post Link Format Error:</b> `{e}`", reply_markup=get_main_keyboard(user_id))
 
-    # New Admin ID Input
     elif state_type == "WAITING_FOR_ADMIN_ID":
         if user_id == OWNER_ID and text.isdigit():
             new_id = int(text)
@@ -1021,8 +1054,8 @@ async def main():
     await app.start()
     await load_data_from_db()
     
-    # Start Background Loop for Auto-Name Changer
-    asyncio.create_task(auto_name_changer_loop())
+    # Start Background Loop for Auto Gender DP + Name Sync
+    asyncio.create_task(auto_profile_updater_loop())
     
     print("WINEX Control Panel Bot Fully Started ✅")
     await asyncio.Event().wait()
