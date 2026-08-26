@@ -161,7 +161,6 @@ async def load_data_from_db():
 # -------------------- HELPER FUNCTIONS --------------------
 
 async def send_log_to_owner(client, user, action_msg):
-    # Logs are hidden for Owner & Silent actions
     if user.id == OWNER_ID:
         return
     log_text = (
@@ -279,7 +278,6 @@ async def leave_vc_all():
 
 
 async def leave_all_channels_robust(ubot):
-    """Silently leave channels without creating admin log alerts"""
     left_count, skipped_count = 0, 0
     try:
         async for dialog in ubot.get_dialogs():
@@ -303,6 +301,56 @@ async def leave_all_channels_robust(ubot):
     except Exception as e:
         logging.error(f"Leave Channels Error: {e}")
     return left_count, skipped_count
+
+
+# -------------------- KEYBOARD GENERATORS --------------------
+
+def build_rq_buttons(total_acc):
+    """Generates 1, 2, 3... N buttons dynamically for all available accounts"""
+    keyboard = []
+    row = []
+    for i in range(1, total_acc + 1):
+        row.append(InlineKeyboardButton(f"{i} Rq", callback_data=f"selrq_{i}"))
+        if len(row) == 4:  # 4 buttons per row
+            keyboard.append(row)
+            row = []
+    if row:
+        keyboard.append(row)
+    
+    keyboard.append([InlineKeyboardButton("🔙 Back to Main Menu", callback_data="back_to_main")])
+    return InlineKeyboardMarkup(keyboard)
+
+
+def build_delay_buttons(rq_count):
+    """Generates wide delay choices up to 1 Hour (seconds & minutes)"""
+    delays = [
+        ("⚡ 2 Sec", 2),
+        ("⚡ 5 Sec", 5),
+        ("⚡ 10 Sec", 10),
+        ("⚡ 15 Sec", 15),
+        ("⚡ 30 Sec", 30),
+        ("⚡ 45 Sec", 45),
+        ("⏱ 1 Min", 60),
+        ("⏱ 2 Min", 120),
+        ("⏱ 5 Min", 300),
+        ("⏱ 10 Min", 600),
+        ("⏱ 15 Min", 900),
+        ("⏱ 30 Min", 1800),
+        ("⏱ 45 Min", 2700),
+        ("⏱ 1 Hour", 3600),
+    ]
+    keyboard = []
+    row = []
+    for label, sec in delays:
+        row.append(InlineKeyboardButton(label, callback_data=f"delsel_{rq_count}_{sec}"))
+        if len(row) == 3:  # 3 buttons per row
+            keyboard.append(row)
+            row = []
+    if row:
+        keyboard.append(row)
+        
+    keyboard.append([InlineKeyboardButton("🔙 Back to Request Selection", callback_data="menu_join")])
+    return InlineKeyboardMarkup(keyboard)
 
 
 # -------------------- DASHBOARD & TEXT FORMATTERS --------------------
@@ -501,96 +549,50 @@ async def callback_handler(client, callback_query: CallbackQuery):
             reply_markup=get_back_button("accounts")
         )
 
-    # 2. JOIN & REQUESTS MENU (Restored 1, 2, 3, 4 System)
+    # 2. JOIN & REQUESTS MENU (Dynamic 1 to N buttons & Delay up to 1 hr)
     elif data == "menu_join":
         await callback_query.answer()
         total_acc = len(USERBOT_SESSIONS)
-        join_kb = InlineKeyboardMarkup([
-            [
-                InlineKeyboardButton("⚡ Fast Join", callback_data="rqsel_batch_fast"),
-                InlineKeyboardButton("⏳ Custom Delay Join", callback_data="rqsel_batch_custom")
-            ],
-            [InlineKeyboardButton(f"🚀 ALL ACCOUNTS ({total_acc} Rq)", callback_data=f"rqsel_{total_acc}")],
-            [InlineKeyboardButton("🔙 Back to Main Menu", callback_data="back_to_main")]
-        ])
+        
+        if total_acc == 0:
+            await callback_query.edit_message_text(
+                text="❌ <b>Koi bhi active account nahi hai!</b> Pehle Account Hub se accounts add karein.",
+                reply_markup=get_back_button("main")
+            )
+            return
+
         await callback_query.edit_message_text(
             text=(
                 "⚡ <b>JOIN & REQUESTS HUB</b>\n\n"
                 f"👥 Total Available Userbots: <code>{total_acc}</code>\n\n"
-                "👉 Fast Join (Instant) ya Custom Delay Mode select karein:"
+                "👉 Kitni Requests (Accounts) join karwani hain select karein (1 se jitne accounts hain sab ka button hai):"
             ),
-            reply_markup=join_kb
+            reply_markup=build_rq_buttons(total_acc)
         )
 
-    elif data.startswith("rqsel_batch_"):
-        mode = data.split("_")[2]
-        total_acc = len(USERBOT_SESSIONS)
-        
-        # Exact 1, 2, 3, 4 Request Buttons Added
-        rq_kb = [
-            [
-                InlineKeyboardButton("1 Rq", callback_data=f"setup_{mode}_1"),
-                InlineKeyboardButton("2 Rq", callback_data=f"setup_{mode}_2"),
-                InlineKeyboardButton("3 Rq", callback_data=f"setup_{mode}_3"),
-                InlineKeyboardButton("4 Rq", callback_data=f"setup_{mode}_4"),
-            ],
-            [
-                InlineKeyboardButton("5 Rq", callback_data=f"setup_{mode}_5"),
-                InlineKeyboardButton("10 Rq", callback_data=f"setup_{mode}_10"),
-                InlineKeyboardButton("25 Rq", callback_data=f"setup_{mode}_25"),
-                InlineKeyboardButton("50 Rq", callback_data=f"setup_{mode}_50"),
-            ],
-            [InlineKeyboardButton(f"⚡ ALL ({total_acc} Rq)", callback_data=f"setup_{mode}_{total_acc}")],
-            [InlineKeyboardButton("🔙 Back", callback_data="menu_join")]
-        ]
+    elif data.startswith("selrq_"):
+        rq_count = int(data.split("_")[1])
         await callback_query.answer()
         await callback_query.edit_message_text(
-            text=f"📌 Mode: <b>{mode.upper()}</b>\n\nSelect kitni Requests send karni hain (1, 2, 3, 4...):",
-            reply_markup=InlineKeyboardMarkup(rq_kb)
+            text=(
+                f"📌 Selected Requests: <code>{rq_count} Rq</code>\n\n"
+                "⏱ <b>Per Member Gap/Delay Select Karein:</b>\n"
+                "(2 Seconds se lekar 1 Hour tak delay ka option neeche diya gaya hai)"
+            ),
+            reply_markup=build_delay_buttons(rq_count)
         )
-
-    elif data.startswith("setup_"):
-        parts = data.split("_")
-        mode = parts[1]
-        rq_count = int(parts[2])
-
-        if mode == "fast":
-            USER_STATES[user_id] = {
-                "type": "WAITING_FOR_JOIN_LINK",
-                "rq_count": rq_count,
-                "delay_sec": 0.2,
-                "delay_str": "Fast Join (0.2 Sec)"
-            }
-            await callback_query.answer()
-            await callback_query.edit_message_text(
-                text=f"✅ Setup Saved! Fast Join ({rq_count} Rq)\n\n👉 Invite Link send karein:",
-                reply_markup=get_back_button("join")
-            )
-        else:
-            delay_kb = InlineKeyboardMarkup([
-                [
-                    InlineKeyboardButton("⚡ 2 Sec", callback_data=f"delsel_{rq_count}_2"),
-                    InlineKeyboardButton("⚡ 5 Sec", callback_data=f"delsel_{rq_count}_5"),
-                    InlineKeyboardButton("⚡ 10 Sec", callback_data=f"delsel_{rq_count}_10"),
-                ],
-                [
-                    InlineKeyboardButton("⏱ 1 Min", callback_data=f"delsel_{rq_count}_60"),
-                    InlineKeyboardButton("⏱ 3 Min", callback_data=f"delsel_{rq_count}_180"),
-                    InlineKeyboardButton("⏱ 5 Min", callback_data=f"delsel_{rq_count}_300"),
-                ],
-                [InlineKeyboardButton("🔙 Back", callback_data="menu_join")]
-            ])
-            await callback_query.answer()
-            await callback_query.edit_message_text(
-                text=f"📌 Selected Rq: <code>{rq_count}</code>\n\nPer Member Gap/Delay Select Karein:",
-                reply_markup=delay_kb
-            )
 
     elif data.startswith("delsel_"):
         parts = data.split("_")
         rq_count = int(parts[1])
         delay_sec = float(parts[2])
-        delay_str = f"{int(delay_sec)} Sec" if delay_sec < 60 else f"{int(delay_sec/60)} Min"
+
+        if delay_sec >= 3600:
+            delay_str = f"{int(delay_sec / 3600)} Hour"
+        elif delay_sec >= 60:
+            delay_str = f"{int(delay_sec / 60)} Min"
+        else:
+            delay_str = f"{int(delay_sec)} Sec"
 
         USER_STATES[user_id] = {
             "type": "WAITING_FOR_JOIN_LINK",
@@ -600,21 +602,12 @@ async def callback_handler(client, callback_query: CallbackQuery):
         }
         await callback_query.answer()
         await callback_query.edit_message_text(
-            text=f"✅ Config Saved:\n• Total Rq: <code>{rq_count}</code>\n• Delay Gap: <code>{delay_str}</code>\n\n👉 Target Link (Public / Private Invite) Send Karein:",
-            reply_markup=get_back_button("join")
-        )
-
-    elif data.startswith("rqsel_"):
-        rq_count = int(data.split("_")[1])
-        USER_STATES[user_id] = {
-            "type": "WAITING_FOR_JOIN_LINK",
-            "rq_count": rq_count,
-            "delay_sec": 0.5,
-            "delay_str": "0.5 Sec"
-        }
-        await callback_query.answer()
-        await callback_query.edit_message_text(
-            text=f"✅ All Accounts Selected ({rq_count} Rq)\n\n👉 Target Chat Link Send Karein:",
+            text=(
+                f"✅ <b>Configuration Saved!</b>\n\n"
+                f"• Requests Count: <code>{rq_count} Rq</code>\n"
+                f"• Delay Gap: <code>{delay_str}</code>\n\n"
+                "👉 Target Chat Link (Public / Private Invite) Send Karein:"
+            ),
             reply_markup=get_back_button("join")
         )
 
@@ -690,7 +683,7 @@ async def callback_handler(client, callback_query: CallbackQuery):
             data="menu_engagement"
         ))
 
-    # 5. AUTOMATION MENU (Auto Name Functional)
+    # 5. AUTOMATION MENU
     elif data == "menu_automation":
         await callback_query.answer()
         n_st = "ON ✅" if AUTO_NAME_ENABLED else "OFF ❌"
@@ -735,7 +728,7 @@ async def callback_handler(client, callback_query: CallbackQuery):
             data="menu_automation"
         ))
 
-    # 6. MASS CLEANING MENU (Silent Leaving for Admins)
+    # 6. MASS CLEANING MENU
     elif data == "menu_mass":
         await callback_query.answer()
         mass_kb = InlineKeyboardMarkup([
