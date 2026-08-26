@@ -136,10 +136,8 @@ async def auto_profile_updater_loop():
             for s_str, data in list(USERBOT_SESSIONS.items()):
                 try:
                     ubot = data["client"]
-                    # Randomly pick gender for account
                     gender = random.choice(["boy", "girl"])
                     
-                    # 1. Update Real DP if enabled
                     if AUTO_DP_ENABLED:
                         dp_file = await download_real_dp(gender, data.get("user_id", random.randint(1000, 9999)))
                         if dp_file:
@@ -151,7 +149,6 @@ async def auto_profile_updater_loop():
                                 if os.path.exists(dp_file):
                                     os.remove(dp_file)
 
-                    # 2. Update Matching Name (Girl DP -> Girl Name / Boy DP -> Boy Name)
                     if AUTO_NAME_ENABLED:
                         matched_name = random.choice(GIRL_NAMES if gender == "girl" else BOY_NAMES)
                         await ubot.update_profile(first_name=matched_name)
