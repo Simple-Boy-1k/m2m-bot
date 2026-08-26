@@ -358,7 +358,8 @@ def get_main_keyboard(user_id=None):
             create_safe_button("🔄 Refresh Panel", "action_refresh", enabled),
         ],
         [
-            InlineKeyboardButton("👑 Owner Contact", url=f"tg://user?id={OWNER_ID}")
+            # Owner contact username updated here
+            InlineKeyboardButton("👑 Owner Contact", url="https://t.me/Simple_Boy_1k")
         ]
     ]
 
