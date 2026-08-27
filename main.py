@@ -70,6 +70,7 @@ mongo_client = motor.motor_asyncio.AsyncIOMotorClient(MONGO_URL)
 db = mongo_client["p2p_m2m_bot_db"]
 sessions_col = db["userbot_sessions"]
 admins_col = db["bot_admins"]
+pending_req_col = db["pending_admin_requests"] # New collection for requests
 
 # Global Storage
 ADMIN_IDS = {OWNER_ID}
@@ -141,7 +142,6 @@ async def send_log_to_owner(client, user, action_msg):
     except Exception as e:
         logging.error(f"Owner Log Error: {e}")
 
-
 async def join_target_chat(ubot, chat_link: str):
     chat_link = chat_link.strip()
     try:
@@ -170,7 +170,6 @@ async def join_target_chat(ubot, chat_link: str):
         if "INVITE_HASH_EXPIRED" in err_msg:
             return False, None, "Invite Link Expired"
         return False, None, "Network / Invalid Link"
-
 
 async def join_vc_session(ubot, chat_link: str):
     success, chat, msg = await join_target_chat(ubot, chat_link)
@@ -209,7 +208,6 @@ async def join_vc_session(ubot, chat_link: str):
             return True, "Already In VC ✅"
         return False, f"VC Error: {err_str}"
 
-
 async def leave_vc_all():
     global ACTIVE_VC_COUNT, CURRENT_VC_CHAT
     if not CURRENT_VC_CHAT:
@@ -243,7 +241,6 @@ async def leave_vc_all():
 
     ACTIVE_VC_COUNT = 0
     return left_count
-
 
 async def leave_all_channels_robust(ubot):
     left_count, skipped_count = 0, 0
@@ -286,23 +283,12 @@ def build_rq_buttons(total_acc):
     keyboard.append([InlineKeyboardButton("🔙 Back to Main Menu", callback_data="back_to_main")])
     return InlineKeyboardMarkup(keyboard)
 
-
 def build_delay_buttons(rq_count):
     delays = [
-        ("⚡ 2 Sec", 2),
-        ("⚡ 5 Sec", 5),
-        ("⚡ 10 Sec", 10),
-        ("⚡ 15 Sec", 15),
-        ("⚡ 30 Sec", 30),
-        ("⚡ 45 Sec", 45),
-        ("⏱ 1 Min", 60),
-        ("⏱ 2 Min", 120),
-        ("⏱ 5 Min", 300),
-        ("⏱ 10 Min", 600),
-        ("⏱ 15 Min", 900),
-        ("⏱ 30 Min", 1800),
-        ("⏱ 45 Min", 2700),
-        ("⏱ 1 Hour", 3600),
+        ("⚡ 2 Sec", 2), ("⚡ 5 Sec", 5), ("⚡ 10 Sec", 10), ("⚡ 15 Sec", 15),
+        ("⚡ 30 Sec", 30), ("⚡ 45 Sec", 45), ("⏱ 1 Min", 60), ("⏱ 2 Min", 120),
+        ("⏱ 5 Min", 300), ("⏱ 10 Min", 600), ("⏱ 15 Min", 900), ("⏱ 30 Min", 1800),
+        ("⏱ 45 Min", 2700), ("⏱ 1 Hour", 3600),
     ]
     keyboard = []
     row = []
@@ -336,10 +322,8 @@ def get_panel_text():
         "✨ <b>Neeche Menu se Category choose karein:</b>"
     )
 
-
 def get_main_keyboard(user_id=None):
     enabled = BUTTON_COLOUR
-
     keyboard = [
         [
             create_safe_button("📁 Account Hub", "menu_accounts", enabled),
@@ -361,9 +345,7 @@ def get_main_keyboard(user_id=None):
             InlineKeyboardButton("👑 Owner Contact", url="https://t.me/Simple_Boy_1k")
         ]
     ]
-
     return InlineKeyboardMarkup(keyboard)
-
 
 def get_back_button(target_menu="main"):
     cb_data = "back_to_main" if target_menu == "main" else f"menu_{target_menu}"
@@ -376,10 +358,31 @@ def get_back_button(target_menu="main"):
 @app.on_message(filters.command("start") & filters.private)
 async def start_handler(client, message):
     user_id = message.from_user.id
+    
+    # SYSTEM 1: If User is not Admin (Request System)
     if user_id not in ADMIN_IDS:
-        await message.reply_text("⛔ **Access Denied:** Aap Authorized Admin Nahi Hain!")
+        user_accounts_count = await sessions_col.count_documents({"added_by": user_id})
+        
+        req_kb = InlineKeyboardMarkup([
+            [InlineKeyboardButton("➕ Add Account", callback_data="user_add_acc")],
+            [InlineKeyboardButton("📤 Send Request to Owner", callback_data="user_send_req")],
+            [InlineKeyboardButton("👑 Owner Contact", url="https://t.me/Simple_Boy_1k")]
+        ])
+        
+        await message.reply_text(
+            text=(
+                "👋 <b>WELCOME TO BOT!</b>\n\n"
+                "🔒 <b>Bot me Admin banne ka tarika:</b>\n"
+                "1️⃣ Pehle kam se kam <b>3 accounts</b> add karein.\n"
+                "2️⃣ Uske baad <b>'Send Request to Owner'</b> button par click karke request dalein.\n"
+                "3️⃣ Owner jab aapki request accept karega, tab aapko bot ka Admin access mil jayega! 🔥\n\n"
+                f"📊 Aapke Added Accounts: <b>{user_accounts_count} / 3</b>"
+            ),
+            reply_markup=req_kb
+        )
         return
 
+    # SYSTEM 2: If User IS Admin (Show Panel)
     await message.reply_text(
         text=get_panel_text(), reply_markup=get_main_keyboard(user_id)
     )
@@ -390,12 +393,123 @@ async def start_handler(client, message):
 async def callback_handler(client, callback_query: CallbackQuery):
     global AUTO_VIEWS_ENABLED, ONLINE_247_ENABLED, ACTIVE_VC_COUNT
     user_id = callback_query.from_user.id
+    data = callback_query.data
 
+    # ---------------- NON-ADMIN & REQUEST HANDLERS ----------------
     if user_id not in ADMIN_IDS:
-        await callback_query.answer("⛔ Access Denied!", show_alert=True)
+        if data == "user_add_acc":
+            USER_STATES[user_id] = "WAITING_FOR_USER_SESSION"
+            await callback_query.answer()
+            add_kb = InlineKeyboardMarkup([
+                [InlineKeyboardButton("⚡ String Generator Bot", url="https://t.me/String_Seasone_robot?start=promoted")],
+                [InlineKeyboardButton("🔙 Back", callback_data="user_back_start")]
+            ])
+            await callback_query.edit_message_text(
+                text=(
+                    "<b>➕ ADD ACCOUNT FOR ADMIN REQUEST</b>\n\n"
+                    "1️⃣ Pyrogram V2 String Session nikalein.\n"
+                    "2️⃣ Yahan chat me paste karke bhej dein.\n\n"
+                    "👉 Direct Text String Bhejein:"
+                ),
+                reply_markup=add_kb
+            )
+            return
+
+        elif data == "user_back_start":
+            USER_STATES.pop(user_id, None)
+            await callback_query.answer()
+            user_accounts_count = await sessions_col.count_documents({"added_by": user_id})
+            req_kb = InlineKeyboardMarkup([
+                [InlineKeyboardButton("➕ Add Account", callback_data="user_add_acc")],
+                [InlineKeyboardButton("📤 Send Request to Owner", callback_data="user_send_req")],
+                [InlineKeyboardButton("👑 Owner Contact", url="https://t.me/Simple_Boy_1k")]
+            ])
+            await callback_query.edit_message_text(
+                text=(
+                    "👋 <b>WELCOME TO BOT!</b>\n\n"
+                    "🔒 <b>Bot me Admin banne ka tarika:</b>\n"
+                    "1️⃣ Pehle kam se kam <b>3 accounts</b> add karein.\n"
+                    "2️⃣ Uske baad <b>'Send Request to Owner'</b> button par click karke request dalein.\n"
+                    "3️⃣ Owner jab aapki request accept karega, tab aapko bot ka Admin access mil jayega! 🔥\n\n"
+                    f"📊 Aapke Added Accounts: <b>{user_accounts_count} / 3</b>"
+                ),
+                reply_markup=req_kb
+            )
+            return
+
+        elif data == "user_send_req":
+            user_accounts_count = await sessions_col.count_documents({"added_by": user_id})
+            if user_accounts_count < 3:
+                await callback_query.answer(f"❌ Pehle 3 accounts add karein! Aapne abhi {user_accounts_count} add kiye hain.", show_alert=True)
+                return
+            
+            existing_req = await pending_req_col.find_one({"user_id": user_id, "status": "pending"})
+            if existing_req:
+                await callback_query.answer("⏳ Aapki request already Owner ke paas pending hai!", show_alert=True)
+                return
+
+            await pending_req_col.insert_one({"user_id": user_id, "status": "pending"})
+            
+            owner_kb = InlineKeyboardMarkup([
+                [
+                    InlineKeyboardButton("✅ Accept Admin", callback_data=f"accept_adm_{user_id}"),
+                    InlineKeyboardButton("❌ Reject", callback_data=f"reject_adm_{user_id}")
+                ]
+            ])
+            try:
+                await client.send_message(
+                    OWNER_ID,
+                    f"🔔 <b>NEW ADMIN REQUEST!</b>\n\n"
+                    f"👤 User: <a href='tg://user?id={user_id}'>{callback_query.from_user.first_name}</a> (<code>{user_id}</code>)\n"
+                    f"📱 Added Accounts: <b>{user_accounts_count}</b>\n\n"
+                    "Kya aap ise Admin banana chahte hain?",
+                    reply_markup=owner_kb
+                )
+            except Exception as e:
+                logging.error(f"Owner notification error: {e}")
+
+            await callback_query.answer("✅ Request Owner ke paas bhej di gayi hai! Thoda intezaar karein.", show_alert=True)
+            return
+
+        await callback_query.answer("⛔ Access Denied! Ye feature sirf Admins ke liye hai.", show_alert=True)
         return
 
-    data = callback_query.data
+    # ---------------- OWNER ACCEPT/REJECT REQUESTS ----------------
+    if data.startswith("accept_adm_") or data.startswith("reject_adm_"):
+        if user_id != OWNER_ID:
+            await callback_query.answer("⛔ Sirf Main Owner ye action le sakta hai!", show_alert=True)
+            return
+        
+        parts = data.split("_")
+        action = parts[0]
+        target_user_id = int(parts[2])
+
+        if action == "accept":
+            ADMIN_IDS.add(target_user_id)
+            await admins_col.update_one({"user_id": target_user_id}, {"$set": {"user_id": target_user_id}}, upsert=True)
+            await pending_req_col.update_one({"user_id": target_user_id}, {"$set": {"status": "accepted"}})
+            
+            await callback_query.answer("Admin Accepted Successfully! ✅", show_alert=True)
+            await callback_query.edit_message_text(f"✅ User <code>{target_user_id}</code> ko successfully Admin bana diya gaya hai!")
+            
+            try:
+                await client.send_message(
+                    target_user_id,
+                    "🎉 <b>CONGRATULATIONS!</b>\n\nOwner ne aapki admin request accept kar li hai. Ab aap `/start` karke bot ka control panel use kar sakte hain!"
+                )
+            except Exception:
+                pass
+        else:
+            await pending_req_col.update_one({"user_id": target_user_id}, {"$set": {"status": "rejected"}})
+            await callback_query.answer("Request Rejected ❌", show_alert=True)
+            await callback_query.edit_message_text(f"❌ User <code>{target_user_id}</code> ki request reject kar di gayi hai.")
+            try:
+                await client.send_message(target_user_id, "❌ Aapki Admin request Owner dwara reject kar di gayi hai.")
+            except Exception:
+                pass
+        return
+
+    # ---------- REGULAR ADMIN ACTIONS BELOW THIS LINE ----------
 
     if data == "back_to_main":
         USER_STATES.pop(user_id, None)
@@ -410,12 +524,9 @@ async def callback_handler(client, callback_query: CallbackQuery):
             text=get_panel_text(), reply_markup=get_main_keyboard(user_id)
         )
 
-    # 1. ACCOUNT HUB MENU (Admins & Owners both can see Add Account button now!)
     elif data == "menu_accounts":
         await callback_query.answer()
         kb = []
-        
-        # Add Account button available for both Owner and Admins now!
         add_purge_row = [InlineKeyboardButton("➕ Add Account", callback_data="act_add_acc")]
         if user_id == OWNER_ID:
             add_purge_row.append(InlineKeyboardButton("🔔 Purge Dead", callback_data="act_purge_dead"))
@@ -425,15 +536,9 @@ async def callback_handler(client, callback_query: CallbackQuery):
             for s_str, info in list(USERBOT_SESSIONS.items()):
                 phone_lbl = info["phone"]
                 if user_id == OWNER_ID:
-                    # Owner gets the remove option button
-                    kb.append([
-                        InlineKeyboardButton(f"❌ Remove {phone_lbl}", callback_data=f"delacc_{hash(s_str)}")
-                    ])
+                    kb.append([InlineKeyboardButton(f"❌ Remove {phone_lbl}", callback_data=f"delacc_{hash(s_str)}")])
                 else:
-                    # Normal Admins see account info (no remove option)
-                    kb.append([
-                        InlineKeyboardButton(f"📱 {phone_lbl} (Active)", callback_data="none_action")
-                    ])
+                    kb.append([InlineKeyboardButton(f"📱 {phone_lbl} (Active)", callback_data="none_action")])
                 
         kb.append([InlineKeyboardButton("🔙 Back to Main Menu", callback_data="back_to_main")])
 
@@ -524,7 +629,6 @@ async def callback_handler(client, callback_query: CallbackQuery):
             reply_markup=get_back_button("accounts")
         )
 
-    # 2. JOIN & REQUESTS MENU
     elif data == "menu_join":
         await callback_query.answer()
         total_acc = len(USERBOT_SESSIONS)
@@ -586,7 +690,6 @@ async def callback_handler(client, callback_query: CallbackQuery):
             reply_markup=get_back_button("join")
         )
 
-    # 3. VOICE CHAT HUB
     elif data == "menu_vc":
         await callback_query.answer()
         vc_kb = InlineKeyboardMarkup([
@@ -622,7 +725,6 @@ async def callback_handler(client, callback_query: CallbackQuery):
             reply_markup=get_back_button("vc")
         )
 
-    # 4. REACT & VIEWS HUB
     elif data == "menu_engagement":
         await callback_query.answer()
         eng_st = "ENABLED ✅" if AUTO_VIEWS_ENABLED else "DISABLED ❌"
@@ -658,7 +760,6 @@ async def callback_handler(client, callback_query: CallbackQuery):
             data="menu_engagement"
         ))
 
-    # 5. AUTOMATION MENU
     elif data == "menu_automation":
         await callback_query.answer()
         p_st = "24/7 ONLINE ✅" if ONLINE_247_ENABLED else "OFF 🔴"
@@ -681,7 +782,6 @@ async def callback_handler(client, callback_query: CallbackQuery):
             data="menu_automation"
         ))
 
-    # 6. MASS CLEANING MENU (Owner Only)
     elif data == "menu_mass":
         if user_id != OWNER_ID:
             await callback_query.answer("⛔ Yeh section sirf Main Owner ke liye hai!", show_alert=True)
@@ -738,7 +838,6 @@ async def callback_handler(client, callback_query: CallbackQuery):
             reply_markup=get_back_button("mass")
         )
 
-    # 7. ADMIN SECURITY PANEL
     elif data == "menu_admin":
         await callback_query.answer()
         
@@ -818,12 +917,60 @@ async def callback_handler(client, callback_query: CallbackQuery):
 @app.on_message(filters.private & ~filters.command(["start"]))
 async def message_input_handler(client, message):
     user_id = message.from_user.id
+    text = message.text.strip()
     state = USER_STATES.get(user_id)
 
+    # ---------------- ADD ACCOUNT FOR NON-ADMINS ----------------
+    if state == "WAITING_FOR_USER_SESSION":
+        try:
+            temp_client = Client(
+                f"ubot_user_{user_id}_{random.randint(1000,9999)}",
+                api_id=API_ID,
+                api_hash=API_HASH,
+                session_string=text,
+                in_memory=True,
+            )
+            await temp_client.start()
+            me = await temp_client.get_me()
+            phone_num = f"+{me.phone_number}" if me.phone_number else f"ID: {me.id}"
+
+            USERBOT_SESSIONS[text] = {
+                "client": temp_client,
+                "phone": phone_num,
+                "name": me.first_name or "User",
+                "user_id": me.id
+            }
+
+            await sessions_col.update_one(
+                {"session": text},
+                {"$set": {"session": text, "user_id": me.id, "added_by": user_id}},
+                upsert=True,
+            )
+
+            USER_STATES.pop(user_id, None)
+            user_accounts_count = await sessions_col.count_documents({"added_by": user_id})
+
+            req_kb = InlineKeyboardMarkup([
+                [InlineKeyboardButton("➕ Add More Account", callback_data="user_add_acc")],
+                [InlineKeyboardButton("📤 Send Request to Owner", callback_data="user_send_req")],
+                [InlineKeyboardButton("🔙 Back", callback_data="user_back_start")]
+            ])
+
+            await message.reply_text(
+                f"✅ <b>Account Successfully Added!</b>\n\n"
+                f"• Phone/ID: <code>{phone_num}</code>\n"
+                f"• Aapke Total Added Accounts: <b>{user_accounts_count} / 3</b>\n\n"
+                "Jab 3 accounts ho jayein, tab <b>'Send Request to Owner'</b> par click karein.",
+                reply_markup=req_kb,
+            )
+        except Exception as e:
+            await message.reply_text(f"❌ <b>Invalid Session String:</b>\n`{str(e)}`\n\nDobara sahi string session send karein.")
+        return
+
+    # Normal check for Admins
     if not state or user_id not in ADMIN_IDS:
         return
 
-    text = message.text.strip()
     state_type = state.get("type") if isinstance(state, dict) else state
 
     if state_type == "WAITING_FOR_SESSION":
@@ -848,7 +995,7 @@ async def message_input_handler(client, message):
 
             await sessions_col.update_one(
                 {"session": text},
-                {"$set": {"session": text, "user_id": me.id}},
+                {"$set": {"session": text, "user_id": me.id, "added_by": user_id}},
                 upsert=True,
             )
 
