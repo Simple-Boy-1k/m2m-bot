@@ -386,7 +386,7 @@ async def start_handler(client, message):
         req_kb = InlineKeyboardMarkup([
             [InlineKeyboardButton("➕ Add Account", callback_data="user_add_acc")],
             [InlineKeyboardButton("📤 Send Request to Owner", callback_data="user_send_req")],
-            [InlineKeyboardButton("👑 Owner Contact", url="https://t.me/Simple_Boy_1k")]
+            [InlineKeyboardButton("👑 Owner Contact", url="https://t.me/contect1234")]
         ])
         
         await message.reply_text(
