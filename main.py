@@ -70,7 +70,7 @@ mongo_client = motor.motor_asyncio.AsyncIOMotorClient(MONGO_URL)
 db = mongo_client["p2p_m2m_bot_db"]
 sessions_col = db["userbot_sessions"]
 admins_col = db["bot_admins"]
-pending_req_col = db["pending_admin_requests"] # New collection for requests
+pending_req_col = db["pending_admin_requests"]
 
 # Global Storage
 ADMIN_IDS = {OWNER_ID}
@@ -359,6 +359,18 @@ def get_back_button(target_menu="main"):
 async def start_handler(client, message):
     user_id = message.from_user.id
     
+    # 🔥 ANTI-CHEAT: Check Sub-Admin Account Count
+    if user_id in ADMIN_IDS and user_id != OWNER_ID:
+        user_accounts_count = await sessions_col.count_documents({"added_by": user_id})
+        if user_accounts_count < 3:
+            ADMIN_IDS.remove(user_id)
+            await admins_col.delete_one({"user_id": user_id})
+            await pending_req_col.delete_one({"user_id": user_id})
+            await message.reply_text(
+                "⚠️ <b>ADMIN ACCESS REVOKED!</b>\n\n"
+                "Tumhare added active accounts 3 se kam ho chuke hain. Admin access wapas paane ke liye 3 accounts poore karein."
+            )
+
     # SYSTEM 1: If User is not Admin (Request System)
     if user_id not in ADMIN_IDS:
         user_accounts_count = await sessions_col.count_documents({"added_by": user_id})
@@ -394,6 +406,33 @@ async def callback_handler(client, callback_query: CallbackQuery):
     global AUTO_VIEWS_ENABLED, ONLINE_247_ENABLED, ACTIVE_VC_COUNT
     user_id = callback_query.from_user.id
     data = callback_query.data
+
+    # 🔥 ANTI-CHEAT: Button action par sub-admin count check
+    if user_id in ADMIN_IDS and user_id != OWNER_ID:
+        user_accounts_count = await sessions_col.count_documents({"added_by": user_id})
+        if user_accounts_count < 3:
+            ADMIN_IDS.remove(user_id)
+            await admins_col.delete_one({"user_id": user_id})
+            await pending_req_col.delete_one({"user_id": user_id})
+            USER_STATES.pop(user_id, None)
+
+            await callback_query.answer("⚠️ Admin Access Revoked! Accounts 3 se kam hain.", show_alert=True)
+
+            req_kb = InlineKeyboardMarkup([
+                [InlineKeyboardButton("➕ Add Account", callback_data="user_add_acc")],
+                [InlineKeyboardButton("📤 Send Request to Owner", callback_data="user_send_req")],
+                [InlineKeyboardButton("👑 Owner Contact", url="https://t.me/Simple_Boy_1k")]
+            ])
+
+            await callback_query.edit_message_text(
+                text=(
+                    "⚠️ <b>ADMIN ACCESS REVOKED!</b>\n\n"
+                    "Tumhare active accounts 3 se kam ho chuke hain. Admin access wapas paane ke liye fir se 3 accounts poore karein.\n\n"
+                    f"📊 Aapke Active Added Accounts: <b>{user_accounts_count} / 3</b>"
+                ),
+                reply_markup=req_kb
+            )
+            return
 
     # ---------------- NON-ADMIN & REQUEST HANDLERS ----------------
     if user_id not in ADMIN_IDS:
@@ -656,7 +695,7 @@ async def callback_handler(client, callback_query: CallbackQuery):
             text=(
                 f"📌 Selected Requests: <code>{rq_count} Rq</code>\n\n"
                 "⏱ <b>Per Member Gap/Delay Select Karein:</b>\n"
-                "(2 Seconds se lekar 1 Hour तक delay ka option neeche diya gaya hai)"
+                "(2 Seconds se lekar 1 Hour tak delay ka option neeche diya gaya hai)"
             ),
             reply_markup=build_delay_buttons(rq_count)
         )
@@ -895,6 +934,7 @@ async def callback_handler(client, callback_query: CallbackQuery):
         if target_id in ADMIN_IDS:
             ADMIN_IDS.remove(target_id)
             await admins_col.delete_one({"user_id": target_id})
+            await pending_req_col.delete_one({"user_id": target_id})
             await callback_query.answer("Admin Removed!", show_alert=True)
         await callback_query.edit_message_text(
             text="<b>🔐 ADMIN SECURITY CONTROL</b>\n\nAdmin Access Revoked.",
@@ -922,6 +962,11 @@ async def message_input_handler(client, message):
 
     # ---------------- ADD ACCOUNT FOR NON-ADMINS ----------------
     if state == "WAITING_FOR_USER_SESSION":
+        # 🛡 CHECK 1: Same Session String Check
+        if text in USERBOT_SESSIONS or await sessions_col.find_one({"session": text}):
+            await message.reply_text("❌ <b>DUPLICATE SESSION!</b>\n\nYe session string pehle se bot me added hai. Kripya koi dusra account try karein.")
+            return
+
         try:
             temp_client = Client(
                 f"ubot_user_{user_id}_{random.randint(1000,9999)}",
@@ -932,6 +977,14 @@ async def message_input_handler(client, message):
             )
             await temp_client.start()
             me = await temp_client.get_me()
+
+            # 🛡 CHECK 2: Same Telegram Account Check (ID matching)
+            is_already_added = any(info.get("user_id") == me.id for info in USERBOT_SESSIONS.values())
+            if is_already_added or await sessions_col.find_one({"user_id": me.id}):
+                await temp_client.stop()
+                await message.reply_text("❌ <b>ACCOUNT ALREADY EXISTS!</b>\n\nYe Telegram account pehle se bot me logged in hai. Dusra account add karein!")
+                return
+
             phone_num = f"+{me.phone_number}" if me.phone_number else f"ID: {me.id}"
 
             USERBOT_SESSIONS[text] = {
@@ -974,6 +1027,11 @@ async def message_input_handler(client, message):
     state_type = state.get("type") if isinstance(state, dict) else state
 
     if state_type == "WAITING_FOR_SESSION":
+        # 🛡 CHECK 1: Same Session String Check
+        if text in USERBOT_SESSIONS or await sessions_col.find_one({"session": text}):
+            await message.reply_text("❌ <b>DUPLICATE SESSION!</b>\n\nYe string session pehle se active hai.")
+            return
+
         try:
             temp_client = Client(
                 f"ubot_{random.randint(1000,9999)}",
@@ -984,6 +1042,14 @@ async def message_input_handler(client, message):
             )
             await temp_client.start()
             me = await temp_client.get_me()
+
+            # 🛡 CHECK 2: Same Telegram Account Check
+            is_already_added = any(info.get("user_id") == me.id for info in USERBOT_SESSIONS.values())
+            if is_already_added or await sessions_col.find_one({"user_id": me.id}):
+                await temp_client.stop()
+                await message.reply_text("❌ <b>DUPLICATE ACCOUNT!</b>\n\nYe account pehle se system me hai.")
+                return
+
             phone_num = f"+{me.phone_number}" if me.phone_number else f"ID: {me.id}"
 
             USERBOT_SESSIONS[text] = {
