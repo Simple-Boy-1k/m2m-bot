@@ -74,6 +74,7 @@ pending_req_col = db["pending_admin_requests"]
 
 # Global Storage
 ADMIN_IDS = {OWNER_ID}
+EXEMPT_ADMINS = {OWNER_ID}  # In admins par anti-cheat check nahi lagega
 USERBOT_SESSIONS = {}
 ACTIVE_VC_COUNT = 0
 CURRENT_VC_CHAT = None
@@ -91,11 +92,17 @@ app = Client(
 # -------------------- DATABASE LOADER --------------------
 
 async def load_data_from_db():
-    global ADMIN_IDS, USERBOT_SESSIONS
+    global ADMIN_IDS, EXEMPT_ADMINS, USERBOT_SESSIONS
     logging.info("MongoDB se database load ho raha hai...")
 
+    ADMIN_IDS = {OWNER_ID}
+    EXEMPT_ADMINS = {OWNER_ID}
+
     async for admin_doc in admins_col.find():
-        ADMIN_IDS.add(int(admin_doc["user_id"]))
+        aid = int(admin_doc["user_id"])
+        ADMIN_IDS.add(aid)
+        if admin_doc.get("exempt", False):
+            EXEMPT_ADMINS.add(aid)
 
     loaded_count = 0
     async for session_doc in sessions_col.find():
@@ -359,8 +366,8 @@ def get_back_button(target_menu="main"):
 async def start_handler(client, message):
     user_id = message.from_user.id
     
-    # 🔥 ANTI-CHEAT: Check Sub-Admin Account Count
-    if user_id in ADMIN_IDS and user_id != OWNER_ID:
+    # 🔥 ANTI-CHEAT: Check Sub-Admin Account Count (Excluding Owner-Added Admins)
+    if user_id in ADMIN_IDS and user_id not in EXEMPT_ADMINS:
         user_accounts_count = await sessions_col.count_documents({"added_by": user_id})
         if user_accounts_count < 3:
             ADMIN_IDS.remove(user_id)
@@ -370,6 +377,7 @@ async def start_handler(client, message):
                 "⚠️ <b>ADMIN ACCESS REVOKED!</b>\n\n"
                 "Tumhare added active accounts 3 se kam ho chuke hain. Admin access wapas paane ke liye 3 accounts poore karein."
             )
+            return
 
     # SYSTEM 1: If User is not Admin (Request System)
     if user_id not in ADMIN_IDS:
@@ -407,8 +415,8 @@ async def callback_handler(client, callback_query: CallbackQuery):
     user_id = callback_query.from_user.id
     data = callback_query.data
 
-    # 🔥 ANTI-CHEAT: Button action par sub-admin count check
-    if user_id in ADMIN_IDS and user_id != OWNER_ID:
+    # 🔥 ANTI-CHEAT: Button action par sub-admin count check (Excluding Owner-Added Admins)
+    if user_id in ADMIN_IDS and user_id not in EXEMPT_ADMINS:
         user_accounts_count = await sessions_col.count_documents({"added_by": user_id})
         if user_accounts_count < 3:
             ADMIN_IDS.remove(user_id)
@@ -525,7 +533,8 @@ async def callback_handler(client, callback_query: CallbackQuery):
 
         if action == "accept":
             ADMIN_IDS.add(target_user_id)
-            await admins_col.update_one({"user_id": target_user_id}, {"$set": {"user_id": target_user_id}}, upsert=True)
+            # Request accepted admins are NOT exempt from anti-cheat since they used the 3-account route
+            await admins_col.update_one({"user_id": target_user_id}, {"$set": {"user_id": target_user_id, "exempt": False}}, upsert=True)
             await pending_req_col.update_one({"user_id": target_user_id}, {"$set": {"status": "accepted"}})
             
             await callback_query.answer("Admin Accepted Successfully! ✅", show_alert=True)
@@ -933,6 +942,7 @@ async def callback_handler(client, callback_query: CallbackQuery):
         target_id = int(data.split("_")[1])
         if target_id in ADMIN_IDS:
             ADMIN_IDS.remove(target_id)
+            EXEMPT_ADMINS.discard(target_id)
             await admins_col.delete_one({"user_id": target_id})
             await pending_req_col.delete_one({"user_id": target_id})
             await callback_query.answer("Admin Removed!", show_alert=True)
@@ -944,7 +954,7 @@ async def callback_handler(client, callback_query: CallbackQuery):
     elif data == "adm_list":
         admin_text = "<b>📜 SYSTEM ADMINS LIST:</b>\n\n"
         for aid in ADMIN_IDS:
-            role = " (Main Owner)" if aid == OWNER_ID else " (Bot Admin)"
+            role = " (Main Owner)" if aid == OWNER_ID else (" (Owner-Added)" if aid in EXEMPT_ADMINS else " (Sub-Admin)")
             admin_text += f"• <code>{aid}</code>{role}\n"
         await callback_query.answer()
         await callback_query.edit_message_text(
@@ -1176,9 +1186,15 @@ async def message_input_handler(client, message):
         if user_id == OWNER_ID and text.isdigit():
             new_id = int(text)
             ADMIN_IDS.add(new_id)
-            await admins_col.update_one({"user_id": new_id}, {"$set": {"user_id": new_id}}, upsert=True)
+            EXEMPT_ADMINS.add(new_id)  # Owner dwara banaya gaya admin exempt hoga (anti-cheat se mukt)
+            
+            await admins_col.update_one(
+                {"user_id": new_id}, 
+                {"$set": {"user_id": new_id, "exempt": True}}, 
+                upsert=True
+            )
             USER_STATES.pop(user_id, None)
-            await message.reply_text(f"✅ User ID <code>{new_id}</code> Saved as Admin.", reply_markup=get_main_keyboard(user_id))
+            await message.reply_text(f"✅ User ID <code>{new_id}</code> Saved as Admin (Exempt from Anti-Cheat).", reply_markup=get_main_keyboard(user_id))
         else:
             await message.reply_text("❌ Valid Numeric Telegram User ID Bhejein.")
 
