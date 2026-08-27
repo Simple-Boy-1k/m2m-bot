@@ -410,17 +410,16 @@ async def callback_handler(client, callback_query: CallbackQuery):
             text=get_panel_text(), reply_markup=get_main_keyboard(user_id)
         )
 
-    # 1. ACCOUNT HUB MENU (Admins can view, but remove/add options shown strictly to Owner)
+    # 1. ACCOUNT HUB MENU (Admins & Owners both can see Add Account button now!)
     elif data == "menu_accounts":
         await callback_query.answer()
         kb = []
         
-        # Add and Purge buttons only for Owner
+        # Add Account button available for both Owner and Admins now!
+        add_purge_row = [InlineKeyboardButton("➕ Add Account", callback_data="act_add_acc")]
         if user_id == OWNER_ID:
-            kb.append([
-                InlineKeyboardButton("➕ Add Account", callback_data="act_add_acc"),
-                InlineKeyboardButton("🔔 Purge Dead", callback_data="act_purge_dead")
-            ])
+            add_purge_row.append(InlineKeyboardButton("🔔 Purge Dead", callback_data="act_purge_dead"))
+        kb.append(add_purge_row)
 
         if USERBOT_SESSIONS:
             for s_str, info in list(USERBOT_SESSIONS.items()):
@@ -431,15 +430,15 @@ async def callback_handler(client, callback_query: CallbackQuery):
                         InlineKeyboardButton(f"❌ Remove {phone_lbl}", callback_data=f"delacc_{hash(s_str)}")
                     ])
                 else:
-                    # Normal Admins only see the account info in a non-clickable/info button (no remove option)
+                    # Normal Admins see account info (no remove option)
                     kb.append([
                         InlineKeyboardButton(f"📱 {phone_lbl} (Active)", callback_data="none_action")
                     ])
                 
         kb.append([InlineKeyboardButton("🔙 Back to Main Menu", callback_data="back_to_main")])
 
-        panel_title = "📁 <b>ACCOUNT HUB MANAGEMENT (OWNER VIEW)</b>" if user_id == OWNER_ID else "📁 <b>ACCOUNT HUB (ADMIN VIEW - READ ONLY)</b>"
-        sub_text = "📌 Kisi specific account ko remove karne ke liye ❌ par click karein:" if user_id == OWNER_ID else "📋 Yahan aap connected accounts ki list dekh sakte hain:"
+        panel_title = "📁 <b>ACCOUNT HUB MANAGEMENT (OWNER VIEW)</b>" if user_id == OWNER_ID else "📁 <b>ACCOUNT HUB (ADMIN VIEW)</b>"
+        sub_text = "📌 Kisi specific account ko remove karne ke liye ❌ par click karein:" if user_id == OWNER_ID else "📋 Yahan aap connected accounts dekh sakte hain aur naye accounts add kar sakte hain:"
 
         await callback_query.edit_message_text(
             text=(
@@ -451,7 +450,7 @@ async def callback_handler(client, callback_query: CallbackQuery):
         )
 
     elif data == "none_action":
-        await callback_query.answer("Yeh option sirf Owner ke liye available hai!", show_alert=True)
+        await callback_query.answer("Account remove karne ka access sirf Owner ke pas hai!", show_alert=True)
 
     elif data.startswith("delacc_"):
         if user_id != OWNER_ID:
@@ -483,10 +482,6 @@ async def callback_handler(client, callback_query: CallbackQuery):
         ))
 
     elif data == "act_add_acc":
-        if user_id != OWNER_ID:
-            await callback_query.answer("⛔ Access Denied!", show_alert=True)
-            return
-
         USER_STATES[user_id] = "WAITING_FOR_SESSION"
         await callback_query.answer()
         add_kb = InlineKeyboardMarkup([
@@ -557,7 +552,7 @@ async def callback_handler(client, callback_query: CallbackQuery):
             text=(
                 f"📌 Selected Requests: <code>{rq_count} Rq</code>\n\n"
                 "⏱ <b>Per Member Gap/Delay Select Karein:</b>\n"
-                "(2 Seconds se lekar 1 Hour tak delay ka option neeche diya gaya hai)"
+                "(2 Seconds se lekar 1 Hour तक delay ka option neeche diya gaya hai)"
             ),
             reply_markup=build_delay_buttons(rq_count)
         )
@@ -832,10 +827,6 @@ async def message_input_handler(client, message):
     state_type = state.get("type") if isinstance(state, dict) else state
 
     if state_type == "WAITING_FOR_SESSION":
-        if user_id != OWNER_ID:
-            USER_STATES.pop(user_id, None)
-            return
-
         try:
             temp_client = Client(
                 f"ubot_{random.randint(1000,9999)}",
