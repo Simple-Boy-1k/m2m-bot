@@ -81,6 +81,7 @@ CURRENT_VC_CHAT = None
 AUTO_VIEWS_ENABLED = True
 ONLINE_247_ENABLED = True
 USER_STATES = {}
+STOP_FLAGS = {"join": False}  # Task control flag
 
 app = Client(
     "account_manager_bot",
@@ -411,9 +412,15 @@ async def start_handler(client, message):
 
 @app.on_callback_query()
 async def callback_handler(client, callback_query: CallbackQuery):
-    global AUTO_VIEWS_ENABLED, ONLINE_247_ENABLED, ACTIVE_VC_COUNT
+    global AUTO_VIEWS_ENABLED, ONLINE_247_ENABLED, ACTIVE_VC_COUNT, STOP_FLAGS
     user_id = callback_query.from_user.id
     data = callback_query.data
+
+    # 🛑 STOP TASK BUTTON HANDLER
+    if data == "stop_join_task":
+        STOP_FLAGS["join"] = True
+        await callback_query.answer("🛑 Task roka ja raha hai...", show_alert=True)
+        return
 
     # 🔥 ANTI-CHEAT: Button action par sub-admin count check (Excluding Owner-Added Admins)
     if user_id in ADMIN_IDS and user_id not in EXEMPT_ADMINS:
@@ -533,7 +540,6 @@ async def callback_handler(client, callback_query: CallbackQuery):
 
         if action == "accept":
             ADMIN_IDS.add(target_user_id)
-            # Request accepted admins are NOT exempt from anti-cheat since they used the 3-account route
             await admins_col.update_one({"user_id": target_user_id}, {"$set": {"user_id": target_user_id, "exempt": False}}, upsert=True)
             await pending_req_col.update_one({"user_id": target_user_id}, {"$set": {"status": "accepted"}})
             
@@ -972,7 +978,6 @@ async def message_input_handler(client, message):
 
     # ---------------- ADD ACCOUNT FOR NON-ADMINS ----------------
     if state == "WAITING_FOR_USER_SESSION":
-        # 🛡 CHECK 1: Same Session String Check
         if text in USERBOT_SESSIONS or await sessions_col.find_one({"session": text}):
             await message.reply_text("❌ <b>DUPLICATE SESSION!</b>\n\nYe session string pehle se bot me added hai. Kripya koi dusra account try karein.")
             return
@@ -988,7 +993,6 @@ async def message_input_handler(client, message):
             await temp_client.start()
             me = await temp_client.get_me()
 
-            # 🛡 CHECK 2: Same Telegram Account Check (ID matching)
             is_already_added = any(info.get("user_id") == me.id for info in USERBOT_SESSIONS.values())
             if is_already_added or await sessions_col.find_one({"user_id": me.id}):
                 await temp_client.stop()
@@ -1037,7 +1041,6 @@ async def message_input_handler(client, message):
     state_type = state.get("type") if isinstance(state, dict) else state
 
     if state_type == "WAITING_FOR_SESSION":
-        # 🛡 CHECK 1: Same Session String Check
         if text in USERBOT_SESSIONS or await sessions_col.find_one({"session": text}):
             await message.reply_text("❌ <b>DUPLICATE SESSION!</b>\n\nYe string session pehle se active hai.")
             return
@@ -1053,7 +1056,6 @@ async def message_input_handler(client, message):
             await temp_client.start()
             me = await temp_client.get_me()
 
-            # 🛡 CHECK 2: Same Telegram Account Check
             is_already_added = any(info.get("user_id") == me.id for info in USERBOT_SESSIONS.values())
             if is_already_added or await sessions_col.find_one({"user_id": me.id}):
                 await temp_client.stop()
@@ -1100,16 +1102,32 @@ async def message_input_handler(client, message):
             )
             return
 
+        # Reset Stop Flag for new task
+        STOP_FLAGS["join"] = False
+
+        stop_kb = InlineKeyboardMarkup([
+            [InlineKeyboardButton("🛑 Stop Task", callback_data="stop_join_task")]
+        ])
+
         msg = await message.reply_text(
-            f"⚡ <b>Join Request Active</b>\n\nTarget Rq: <code>{rq_count}</code>\nDelay: <code>{delay_str}</code>\n\nRequests start ho rahi hain..."
+            f"⚡ <b>Join Request Active</b>\n\n"
+            f"🎯 Target Rq: <code>{rq_count}</code>\n"
+            f"⏳ Delay: <code>{delay_str}</code>\n\n"
+            f"⚙️ Task Process Shuru Ho Raha Hai...",
+            reply_markup=stop_kb
         )
 
         await send_log_to_owner(client, message.from_user, f"🚀 Join Order Lagaya:\n🔗 Link: {text}\n🎯 Total Rq: {rq_count}\n⏳ Delay: {delay_str}")
 
         target_sessions = list(USERBOT_SESSIONS.items())[:rq_count]
         joined, failed, error_logs = 0, 0, []
+        was_stopped = False
 
         for idx, (s_str, data_acc) in enumerate(target_sessions, 1):
+            if STOP_FLAGS["join"]:
+                was_stopped = True
+                break
+
             ok, _, err_msg = await join_target_chat(data_acc["client"], text)
             if ok:
                 joined += 1
@@ -1118,13 +1136,38 @@ async def message_input_handler(client, message):
                 if err_msg not in error_logs:
                     error_logs.append(err_msg)
 
-            if idx < rq_count:
-                await asyncio.sleep(delay_sec)
+            # Live Status Update with Stop Button
+            try:
+                await msg.edit_text(
+                    f"⚡ <b>Join Request Progress ({idx}/{rq_count})</b>\n\n"
+                    f"✅ Joined: <b>{joined}</b> | ❌ Failed: <b>{failed}</b>\n"
+                    f"⏳ Delay: <code>{delay_str}</code>\n\n"
+                    f"🛑 Bich me rokne ke liye niche button dabayein:",
+                    reply_markup=stop_kb
+                )
+            except Exception:
+                pass
 
+            # Dynamic delay checking to interrupt sleep immediately if Stop is pressed
+            if idx < rq_count:
+                slept = 0.0
+                while slept < delay_sec:
+                    if STOP_FLAGS["join"]:
+                        was_stopped = True
+                        break
+                    await asyncio.sleep(0.5)
+                    slept += 0.5
+                if was_stopped:
+                    break
+
+        # Task Finished or Stopped: Reset Stop Flag for next task
+        STOP_FLAGS["join"] = False
+
+        status_header = "🛑 <b>Join Operation Stopped by Admin</b>" if was_stopped else "✅ <b>Join Operation Finished</b>"
         res_text = (
-            f"✅ <b>Join Operation Finished</b>\n\n"
-            f"• Total Rq Sent: <b>{rq_count}</b>\n"
-            f"• Delay Gap: <b>{delay_str}</b>\n"
+            f"{status_header}\n\n"
+            f"• Target Rq: <b>{rq_count}</b>\n"
+            f"• Processed: <b>{joined + failed}</b> / <b>{rq_count}</b>\n"
             f"• Successful Joins: <b>{joined}</b>\n"
             f"• Failed: <b>{failed}</b>"
         )
@@ -1186,7 +1229,7 @@ async def message_input_handler(client, message):
         if user_id == OWNER_ID and text.isdigit():
             new_id = int(text)
             ADMIN_IDS.add(new_id)
-            EXEMPT_ADMINS.add(new_id)  # Owner dwara banaya gaya admin exempt hoga (anti-cheat se mukt)
+            EXEMPT_ADMINS.add(new_id)
             
             await admins_col.update_one(
                 {"user_id": new_id}, 
