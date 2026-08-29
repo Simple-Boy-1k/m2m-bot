@@ -71,6 +71,7 @@ db = mongo_client["p2p_m2m_bot_db"]
 sessions_col = db["userbot_sessions"]
 admins_col = db["bot_admins"]
 pending_req_col = db["pending_admin_requests"]
+settings_col = db["bot_settings"]
 
 # Global Storage
 ADMIN_IDS = {OWNER_ID}
@@ -367,7 +368,38 @@ def get_back_button(target_menu="main"):
         InlineKeyboardButton("🔙 Back to Menu", callback_data=cb_data)
     ]])
 
-# -------------------- COMMAND HANDLER --------------------
+# -------------------- COMMAND HANDLERS --------------------
+
+@app.on_message(filters.command("setvideo") & filters.private)
+async def set_video_handler(client, message):
+    user_id = message.from_user.id
+    if user_id != OWNER_ID:
+        await message.reply_text("⛔ Sirf Main Owner hi tutorial video set kar sakta hai!")
+        return
+
+    video_val = None
+    if message.video:
+        video_val = message.video.file_id
+    elif message.reply_to_message and message.reply_to_message.video:
+        video_val = message.reply_to_message.video.file_id
+    elif len(message.command) > 1:
+        video_val = message.command[1].strip()
+
+    if not video_val:
+        await message.reply_text(
+            "❌ <b>Kaise Set Karein Video:</b>\n\n"
+            "1️⃣ Kisi Video ko caption me `/setvideo` likh kar bhej dein.\n"
+            "2️⃣ Pehle se bheji gayi video par Reply karke `/setvideo` likhein.\n"
+            "3️⃣ Direct Link link specify karein: `/setvideo https://your-link.com`"
+        )
+        return
+
+    await settings_col.update_one(
+        {"key": "tutorial_video"},
+        {"$set": {"value": video_val}},
+        upsert=True
+    )
+    await message.reply_text("✅ <b>Tutorial Video Successfully Saved/Updated!</b>")
 
 @app.on_message(filters.command("start") & filters.private)
 async def start_handler(client, message):
@@ -392,6 +424,7 @@ async def start_handler(client, message):
         
         req_kb = InlineKeyboardMarkup([
             [InlineKeyboardButton("➕ Add Account", callback_data="user_add_acc")],
+            [InlineKeyboardButton("🎥 Account Kaise Add Kare?", callback_data="user_tutorial")],
             [InlineKeyboardButton("📤 Send Request to Owner", callback_data="user_send_req")],
             [InlineKeyboardButton("👑 Owner Contact", url="https://t.me/contect1234")]
         ])
@@ -441,6 +474,7 @@ async def callback_handler(client, callback_query: CallbackQuery):
 
             req_kb = InlineKeyboardMarkup([
                 [InlineKeyboardButton("➕ Add Account", callback_data="user_add_acc")],
+                [InlineKeyboardButton("🎥 Account Kaise Add Kare?", callback_data="user_tutorial")],
                 [InlineKeyboardButton("📤 Send Request to Owner", callback_data="user_send_req")],
                 [InlineKeyboardButton("👑 Owner Contact", url="https://t.me/contect1234")]
             ])
@@ -457,11 +491,44 @@ async def callback_handler(client, callback_query: CallbackQuery):
 
     # ---------------- NON-ADMIN & REQUEST HANDLERS ----------------
     if user_id not in ADMIN_IDS:
-        if data == "user_add_acc":
+        if data == "user_tutorial":
+            await callback_query.answer()
+            doc = await settings_col.find_one({"key": "tutorial_video"})
+            video_val = doc.get("value") if doc else None
+
+            tut_kb = InlineKeyboardMarkup([
+                [InlineKeyboardButton("➕ Add Account Now", callback_data="user_add_acc")],
+                [InlineKeyboardButton("🔙 Back", callback_data="user_back_start")]
+            ])
+
+            if video_val:
+                try:
+                    await client.send_video(
+                        chat_id=user_id,
+                        video=video_val,
+                        caption="🎥 <b>ACCOUNT ADD KARNE KA TUTORIAL</b>\n\nIs video ko dekhein aur seekhein ki bot me account kaise add karein!",
+                        reply_markup=tut_kb
+                    )
+                except Exception:
+                    await callback_query.message.reply_text(
+                        f"🎥 <b>ACCOUNT ADD KARNE KA TUTORIAL</b>\n\n"
+                        f"🔗 Video Link: {video_val}\n\n"
+                        "Upar diye gaye link se tutorial video dekhein!",
+                        reply_markup=tut_kb
+                    )
+            else:
+                await callback_query.message.reply_text(
+                    "⚠️ <b>Tutorial Video Abhi Available Nahi Hai!</b>\n\nOwner ne abhi tak video upload nahi ki hai. Kripya Owner Contact par click karke baat karein.",
+                    reply_markup=tut_kb
+                )
+            return
+
+        elif data == "user_add_acc":
             USER_STATES[user_id] = "WAITING_FOR_USER_SESSION"
             await callback_query.answer()
             add_kb = InlineKeyboardMarkup([
                 [InlineKeyboardButton("⚡ String Generator Bot", url="https://t.me/String_Seasone_robot?start=promoted")],
+                [InlineKeyboardButton("🎥 Watch Tutorial", callback_data="user_tutorial")],
                 [InlineKeyboardButton("🔙 Back", callback_data="user_back_start")]
             ])
             await callback_query.edit_message_text(
@@ -481,6 +548,7 @@ async def callback_handler(client, callback_query: CallbackQuery):
             user_accounts_count = await sessions_col.count_documents({"added_by": user_id})
             req_kb = InlineKeyboardMarkup([
                 [InlineKeyboardButton("➕ Add Account", callback_data="user_add_acc")],
+                [InlineKeyboardButton("🎥 Account Kaise Add Kare?", callback_data="user_tutorial")],
                 [InlineKeyboardButton("📤 Send Request to Owner", callback_data="user_send_req")],
                 [InlineKeyboardButton("👑 Owner Contact", url="https://t.me/contect1234")]
             ])
@@ -976,10 +1044,10 @@ async def callback_handler(client, callback_query: CallbackQuery):
 
 # -------------------- MESSAGE INPUT HANDLER --------------------
 
-@app.on_message(filters.private & ~filters.command(["start"]))
+@app.on_message(filters.private & ~filters.command(["start", "setvideo"]))
 async def message_input_handler(client, message):
     user_id = message.from_user.id
-    text = message.text.strip()
+    text = message.text.strip() if message.text else ""
     state = USER_STATES.get(user_id)
 
     # ---------------- ADD ACCOUNT FOR NON-ADMINS ----------------
@@ -1025,6 +1093,7 @@ async def message_input_handler(client, message):
 
             req_kb = InlineKeyboardMarkup([
                 [InlineKeyboardButton("➕ Add More Account", callback_data="user_add_acc")],
+                [InlineKeyboardButton("🎥 Account Kaise Add Kare?", callback_data="user_tutorial")],
                 [InlineKeyboardButton("📤 Send Request to Owner", callback_data="user_send_req")],
                 [InlineKeyboardButton("🔙 Back", callback_data="user_back_start")]
             ])
