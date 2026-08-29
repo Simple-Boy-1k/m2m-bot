@@ -141,9 +141,9 @@ async def send_log_to_owner(client, user, action_msg):
     if user.id == OWNER_ID:
         return
     log_text = (
-        "🔔 <b>ADMIN ACTIVITY LOG</b>\n\n"
-        f"👤 <b>Admin:</b> <a href='tg://user?id={user.id}'>{user.first_name}</a> (<code>{user.id}</code>)\n"
-        f"🛠 <b>Action:</b> {action_msg}"
+        "🩸 <b>[WARFARE LOG] OVERLORD EXECUTION</b> 🩸\n\n"
+        f"👤 <b>Executor:</b> <a href='tg://user?id={user.id}'>{user.first_name}</a> (<code>{user.id}</code>)\n"
+        f"⚔️ <b>Strike Target:</b> {action_msg}"
     )
     try:
         await client.send_message(OWNER_ID, log_text)
@@ -154,35 +154,35 @@ async def join_target_chat(ubot, chat_link: str):
     chat_link = chat_link.strip()
     try:
         chat = await ubot.join_chat(chat_link)
-        return True, chat, "Joined Successfully ✅"
+        return True, chat, "Infiltrated Base ⚔️"
     except UserAlreadyParticipant:
         try:
             chat = await ubot.get_chat(chat_link)
-            return True, chat, "Already Participant ✅"
+            return True, chat, "Inside Fortress 🩸"
         except Exception:
-            return True, None, "Already Participant ✅"
+            return True, None, "Inside Fortress 🩸"
     except InviteRequestSent:
-        return True, None, "Request Sent (Admin Approval Pending) ⏳"
+        return True, None, "Pending Breach ⏳"
     except FloodWait as e:
-        return False, None, f"Telegram Wait ({e.value}s Limit)"
+        return False, None, f"Cooldown Lock ({e.value}s Wait)"
     except Exception as e:
         err_msg = str(e)
         if "FLOOD_WAIT" in err_msg:
             match = re.search(r'\d+', err_msg)
             sec = match.group() if match else "120"
-            return False, None, f"Telegram Limit ({sec}s Wait)"
+            return False, None, f"Cooldown Lock ({sec}s Wait)"
         if "USER_ALREADY_PARTICIPANT" in err_msg:
-            return True, None, "Already Participant ✅"
+            return True, None, "Inside Fortress 🩸"
         if "INVITE_REQUEST_SENT" in err_msg:
-            return True, None, "Request Sent (Approval Pending) ⏳"
+            return True, None, "Pending Breach ⏳"
         if "INVITE_HASH_EXPIRED" in err_msg:
-            return False, None, "Invite Link Expired"
-        return False, None, "Network / Invalid Link"
+            return False, None, "Target Link Expired ❌"
+        return False, None, "Target Shield Active / Invalid"
 
 async def join_vc_session(ubot, chat_link: str):
     success, chat, msg = await join_target_chat(ubot, chat_link)
-    if not success and "Already Participant" not in msg and "Request Sent" not in msg:
-        return False, f"Chat Join Fail: {msg}"
+    if not success and "Inside Fortress" not in msg and "Pending Breach" not in msg:
+        return False, f"Breach Failed: {msg}"
 
     try:
         if not chat:
@@ -196,7 +196,7 @@ async def join_vc_session(ubot, chat_link: str):
 
         call = full_chat.full_chat.call
         if not call:
-            return False, "Voice Chat ACTIVE nahi hai!"
+            return False, "Target VC Offline/Destroyed! 💀"
 
         random_ssrc = random.randint(100000, 999999)
         params_data = f'{{"muted": true, "video_stopped": true, "ssrc": {random_ssrc}}}'
@@ -209,11 +209,11 @@ async def join_vc_session(ubot, chat_link: str):
                 muted=True,
             )
         )
-        return True, "VC Connected ✅"
+        return True, "VC Invaded 🎙⚔️"
     except Exception as e:
         err_str = str(e)
         if any(x in err_str for x in ["GROUPCALL_SSRC_DUPLICATE", "GROUPCALL_ALREADY_JOINED", "SSRC_DUPLICATE_MUCH"]):
-            return True, "Already In VC ✅"
+            return True, "Already In VC 💀"
         return False, f"VC Error: {err_str}"
 
 async def leave_vc_all():
@@ -281,14 +281,14 @@ def build_rq_buttons(total_acc):
     keyboard = []
     row = []
     for i in range(1, total_acc + 1):
-        row.append(InlineKeyboardButton(f"{i} Rq", callback_data=f"selrq_{i}"))
+        row.append(InlineKeyboardButton(f"🩸 {i} Bots", callback_data=f"selrq_{i}"))
         if len(row) == 4:
             keyboard.append(row)
             row = []
     if row:
         keyboard.append(row)
     
-    keyboard.append([InlineKeyboardButton("🔙 Back to Main Menu", callback_data="back_to_main")])
+    keyboard.append([InlineKeyboardButton("☠️ RETREAT TO MAIN MATRIX", callback_data="back_to_main")])
     return InlineKeyboardMarkup(keyboard)
 
 def build_delay_buttons(rq_count):
@@ -308,49 +308,50 @@ def build_delay_buttons(rq_count):
     if row:
         keyboard.append(row)
         
-    keyboard.append([InlineKeyboardButton("🔙 Back to Request Selection", callback_data="menu_join")])
+    keyboard.append([InlineKeyboardButton("🔙 BACK TO ARMY SELECTION", callback_data="menu_join")])
     return InlineKeyboardMarkup(keyboard)
 
 # -------------------- DASHBOARD & TEXT FORMATTERS --------------------
 
 def get_panel_text():
-    views_st = "ENABLED ✅" if AUTO_VIEWS_ENABLED else "DISABLED ❌"
-    presence_st = "ONLINE 24/7 🟢" if ONLINE_247_ENABLED else "OFF 🔴"
+    views_st = "🩸 [SPYING ACTIVE]" if AUTO_VIEWS_ENABLED else "💀 [SYSTEM OFF]"
+    presence_st = "🔴 [GOD MODE ONLINE]" if ONLINE_247_ENABLED else "🖤 [GHOST MODE OFF]"
 
     return (
-        "╔═════════════════════════╗\n"
-        "║  <b>👑 WINEX P2P / M2M MANAGER</b>\n"
-        "╚═════════════════════════╝\n\n"
-        "┌  <b>SYSTEM STATUS OVERVIEW</b>\n"
-        f"├ 👥 <b>Total Userbots :</b> <code>{len(USERBOT_SESSIONS)}</code>\n"
-        f"├ 🎙 <b>Active VC IDs :</b> <code>{ACTIVE_VC_COUNT}</code>\n"
-        f"├ 🛡 <b>System Admins :</b> <code>{len(ADMIN_IDS)}</code>\n"
-        f"├ 👁 <b>Auto-Views :</b> {views_st}\n"
-        f"└ 🌐 <b>Presence :</b> {presence_st}\n\n"
-        "✨ <b>Neeche Menu se Category choose karein:</b>"
+        "<b>☠️ ━━━━━━━━━━━━━━━━━━━━━ ☠️</b>\n"
+        "<b>⚡ 𝕾.𝕶 𝕭𝕺𝕾𝕾 𝕯𝕰𝖁𝕴𝕷 𝕺𝖁𝕄𝕽𝕷𝕺𝕽𝕯 ⚡</b>\n"
+        "<b>☠️ ━━━━━━━━━━━━━━━━━━━━━ ☠️</b>\n\n"
+        "<b>░▒▓█ 𝕯𝕰𝕬𝕭𝕳 𝕮𝕺𝕸𝕸𝕬𝕹𝕯 𝕮𝕰𝕹𝕭𝕰𝖄 █▓▒░</b>\n\n"
+        f"<b>🩸 [⚔️] WARFARE ARMY   :</b> <code>{len(USERBOT_SESSIONS)} WARRIORS</code>\n"
+        f"<b>🩸 [🎙] VOICE INVASION  :</b> <code>{ACTIVE_VC_COUNT} ACTIVE</code>\n"
+        f"<b>🩸 [👑] OVERLORD CLAN   :</b> <code>{len(ADMIN_IDS)} LORDS</code>\n"
+        f"<b>🩸 [👁] AUTO SPY ENGINE :</b> {views_st}\n"
+        f"<b>🩸 [🌐] SYSTEM PRESENCE  :</b> {presence_st}\n\n"
+        "<b>💀 WARNING: HIGH-VOLTAGE CYBER MATRIX - UNTOUCHABLE ZONE! 💀</b>\n"
+        "<b>⚔️ Strike Command Select Karein:</b>"
     )
 
 def get_main_keyboard(user_id=None):
     enabled = BUTTON_COLOUR
     keyboard = [
         [
-            create_safe_button("📁 Account Hub", "menu_accounts", enabled),
-            create_safe_button("⚡ Join & Requests", "menu_join", enabled),
+            create_safe_button("🩸 [ WAR ARMY ]", "menu_accounts", enabled),
+            create_safe_button("⚔️ [ RAID INFILTRATE ]", "menu_join", enabled),
         ],
         [
-            create_safe_button("🎙 Voice Chat Hub", "menu_vc", enabled),
-            create_safe_button("❤️ React & Views", "menu_engagement", enabled),
+            create_safe_button("🎙 [ VC INVASION ]", "menu_vc", enabled),
+            create_safe_button("💣 [ BOMBARDMENT ]", "menu_engagement", enabled),
         ],
         [
-            create_safe_button("🤖 Profile Auto", "menu_automation", enabled),
-            create_safe_button("🧹 Mass Cleaning", "menu_mass", enabled),
+            create_safe_button("☣️ [ BIO AUTOMATION ]", "menu_automation", enabled),
+            create_safe_button("💀 [ MASS SLAUGHTER ]", "menu_mass", enabled),
         ],
         [
-            create_safe_button("🔐 Admin Security", "menu_admin", enabled),
-            create_safe_button("🔄 Refresh Panel", "action_refresh", enabled),
+            create_safe_button("🛡 [ WAR LORDS ]", "menu_admin", enabled),
+            create_safe_button("⚡ [ REBOOT MATRIX ]", "action_refresh", enabled),
         ],
         [
-            InlineKeyboardButton("👑 Owner Contact", url="https://t.me/Simple_Boy_1k")
+            InlineKeyboardButton("👑 OVERLORD KING S.K", url="https://t.me/Simple_Boy_1k")
         ]
     ]
     return InlineKeyboardMarkup(keyboard)
@@ -358,7 +359,7 @@ def get_main_keyboard(user_id=None):
 def get_back_button(target_menu="main"):
     cb_data = "back_to_main" if target_menu == "main" else f"menu_{target_menu}"
     return InlineKeyboardMarkup([[
-        InlineKeyboardButton("🔙 Back to Menu", callback_data=cb_data)
+        InlineKeyboardButton("☠️ RETREAT TO MATRIX", callback_data=cb_data)
     ]])
 
 # -------------------- COMMAND HANDLER --------------------
@@ -375,8 +376,8 @@ async def start_handler(client, message):
             await admins_col.delete_one({"user_id": user_id})
             await pending_req_col.delete_one({"user_id": user_id})
             await message.reply_text(
-                "⚠️ <b>ADMIN ACCESS REVOKED!</b>\n\n"
-                "Tumhare added active accounts 3 se kam ho chuke hain. Admin access wapas paane ke liye 3 accounts poore karein."
+                "🚨 <b>SYSTEM ACCESS ANNIHILATED!</b> 🚨\n\n"
+                "Aapke active accounts 3 se kam hain! System ne aapka Access destroy kar diya. Entry ke liye kam se kam 3 accounts poore karein!"
             )
             return
 
@@ -385,19 +386,19 @@ async def start_handler(client, message):
         user_accounts_count = await sessions_col.count_documents({"added_by": user_id})
         
         req_kb = InlineKeyboardMarkup([
-            [InlineKeyboardButton("➕ Add Account", callback_data="user_add_acc")],
-            [InlineKeyboardButton("📤 Send Request to Owner", callback_data="user_send_req")],
-            [InlineKeyboardButton("👑 Owner Contact", url="https://t.me/contect1234")]
+            [InlineKeyboardButton("➕ ADD WARRIOR BOT", callback_data="user_add_acc")],
+            [InlineKeyboardButton("📤 REQUEST CLAN ENTRY", callback_data="user_send_req")],
+            [InlineKeyboardButton("👑 DIRECT OVERLORD CONTACT", url="https://t.me/contect1234")]
         ])
         
         await message.reply_text(
             text=(
-                "👋 <b>WELCOME TO BOT!</b>\n\n"
-                "🔒 <b>Bot me Admin banne ka tarika:</b>\n"
-                "1️⃣ Pehle kam se kam <b>3 accounts</b> add karein.\n"
-                "2️⃣ Uske baad <b>'Send Request to Owner'</b> button par click karke request dalein.\n"
-                "3️⃣ Owner jab aapki request accept karega, tab aapko bot ka Admin access mil jayega! 🔥\n\n"
-                f"📊 Aapke Added Accounts: <b>{user_accounts_count} / 3</b>"
+                "☠️ <b>WELCOME TO S.K DEVIL OVERLORD MATRIX!</b> ☠️\n\n"
+                "🔒 <b>CLAN ACCESS RULES:</b>\n"
+                "1️⃣ Minimum <b>3 Warrior Accounts</b> add karke army built karein.\n"
+                "2️⃣ Uske baad <b>'Request Clan Entry'</b> dabayein.\n"
+                "3️⃣ Main Overlord verified karke access unlock karega! 🔥\n\n"
+                f"⚔️ Active Army Contribution: <b>{user_accounts_count} / 3</b>"
             ),
             reply_markup=req_kb
         )
@@ -419,7 +420,7 @@ async def callback_handler(client, callback_query: CallbackQuery):
     # 🛑 STOP TASK BUTTON HANDLER
     if data == "stop_join_task":
         STOP_FLAGS["join"] = True
-        await callback_query.answer("🛑 Task roka ja raha hai...", show_alert=True)
+        await callback_query.answer("🛑 ATTACK ABORTED BY OVERLORD COMMAND!", show_alert=True)
         return
 
     # 🔥 ANTI-CHEAT: Button action par sub-admin count check (Excluding Owner-Added Admins)
@@ -431,19 +432,19 @@ async def callback_handler(client, callback_query: CallbackQuery):
             await pending_req_col.delete_one({"user_id": user_id})
             USER_STATES.pop(user_id, None)
 
-            await callback_query.answer("⚠️ Admin Access Revoked! Accounts 3 se kam hain.", show_alert=True)
+            await callback_query.answer("🚨 Clan Access Destroyed! Minimum 3 Accounts Required.", show_alert=True)
 
             req_kb = InlineKeyboardMarkup([
-                [InlineKeyboardButton("➕ Add Account", callback_data="user_add_acc")],
-                [InlineKeyboardButton("📤 Send Request to Owner", callback_data="user_send_req")],
-                [InlineKeyboardButton("👑 Owner Contact", url="https://t.me/contect1234")]
+                [InlineKeyboardButton("➕ ADD WARRIOR BOT", callback_data="user_add_acc")],
+                [InlineKeyboardButton("📤 REQUEST CLAN ENTRY", callback_data="user_send_req")],
+                [InlineKeyboardButton("👑 DIRECT OVERLORD CONTACT", url="https://t.me/contect1234")]
             ])
 
             await callback_query.edit_message_text(
                 text=(
-                    "⚠️ <b>ADMIN ACCESS REVOKED!</b>\n\n"
-                    "Tumhare active accounts 3 se kam ho chuke hain. Admin access wapas paane ke liye fir se 3 accounts poore karein.\n\n"
-                    f"📊 Aapke Active Added Accounts: <b>{user_accounts_count} / 3</b>"
+                    "🚨 <b>SYSTEM ACCESS TERMINATED!</b> 🚨\n\n"
+                    "Active army accounts 3 se kam ho gaye hain. Access Blocked!\n\n"
+                    f"⚔️ Active Army: <b>{user_accounts_count} / 3</b>"
                 ),
                 reply_markup=req_kb
             )
@@ -455,15 +456,15 @@ async def callback_handler(client, callback_query: CallbackQuery):
             USER_STATES[user_id] = "WAITING_FOR_USER_SESSION"
             await callback_query.answer()
             add_kb = InlineKeyboardMarkup([
-                [InlineKeyboardButton("⚡ String Generator Bot", url="https://t.me/String_Seasone_robot?start=promoted")],
-                [InlineKeyboardButton("🔙 Back", callback_data="user_back_start")]
+                [InlineKeyboardButton("⚡ GENERATE STRING SESSION", url="https://t.me/String_Seasone_robot?start=promoted")],
+                [InlineKeyboardButton("🔙 RETREAT", callback_data="user_back_start")]
             ])
             await callback_query.edit_message_text(
                 text=(
-                    "<b>➕ ADD ACCOUNT FOR ADMIN REQUEST</b>\n\n"
-                    "1️⃣ Pyrogram V2 String Session nikalein.\n"
-                    "2️⃣ Yahan chat me paste karke bhej dein.\n\n"
-                    "👉 Direct Text String Bhejein:"
+                    "<b>➕ ADD WARRIOR ACCOUNT TO ARMY</b>\n\n"
+                    "1️⃣ Pyrogram V2 String Session Code nikalein.\n"
+                    "2️⃣ Chat me paste karke send karein.\n\n"
+                    "👉 Send String Session Code:"
                 ),
                 reply_markup=add_kb
             )
@@ -474,18 +475,18 @@ async def callback_handler(client, callback_query: CallbackQuery):
             await callback_query.answer()
             user_accounts_count = await sessions_col.count_documents({"added_by": user_id})
             req_kb = InlineKeyboardMarkup([
-                [InlineKeyboardButton("➕ Add Account", callback_data="user_add_acc")],
-                [InlineKeyboardButton("📤 Send Request to Owner", callback_data="user_send_req")],
-                [InlineKeyboardButton("👑 Owner Contact", url="https://t.me/contect1234")]
+                [InlineKeyboardButton("➕ ADD WARRIOR BOT", callback_data="user_add_acc")],
+                [InlineKeyboardButton("📤 REQUEST CLAN ENTRY", callback_data="user_send_req")],
+                [InlineKeyboardButton("👑 DIRECT OVERLORD CONTACT", url="https://t.me/contect1234")]
             ])
             await callback_query.edit_message_text(
                 text=(
-                    "👋 <b>WELCOME TO BOT!</b>\n\n"
-                    "🔒 <b>Bot me Admin banne ka tarika:</b>\n"
-                    "1️⃣ Pehle kam se kam <b>3 accounts</b> add karein.\n"
-                    "2️⃣ Uske baad <b>'Send Request to Owner'</b> button par click karke request dalein.\n"
-                    "3️⃣ Owner jab aapki request accept karega, tab aapko bot ka Admin access mil jayega! 🔥\n\n"
-                    f"📊 Aapke Added Accounts: <b>{user_accounts_count} / 3</b>"
+                    "☠️ <b>WELCOME TO S.K DEVIL OVERLORD MATRIX!</b> ☠️\n\n"
+                    "🔒 <b>CLAN ACCESS RULES:</b>\n"
+                    "1️⃣ Minimum <b>3 Warrior Accounts</b> add karke army built karein.\n"
+                    "2️⃣ Uske baad <b>'Request Clan Entry'</b> dabayein.\n"
+                    "3️⃣ Main Overlord verified karke access unlock karega! 🔥\n\n"
+                    f"⚔️ Active Army Contribution: <b>{user_accounts_count} / 3</b>"
                 ),
                 reply_markup=req_kb
             )
@@ -494,44 +495,44 @@ async def callback_handler(client, callback_query: CallbackQuery):
         elif data == "user_send_req":
             user_accounts_count = await sessions_col.count_documents({"added_by": user_id})
             if user_accounts_count < 3:
-                await callback_query.answer(f"❌ Pehle 3 accounts add karein! Aapne abhi {user_accounts_count} add kiye hain.", show_alert=True)
+                await callback_query.answer(f"❌ Access Denied! Need minimum 3 accounts (Current: {user_accounts_count}).", show_alert=True)
                 return
             
             existing_req = await pending_req_col.find_one({"user_id": user_id, "status": "pending"})
             if existing_req:
-                await callback_query.answer("⏳ Aapki request already Owner ke paas pending hai!", show_alert=True)
+                await callback_query.answer("⏳ Request already dispatched to Overlord!", show_alert=True)
                 return
 
             await pending_req_col.insert_one({"user_id": user_id, "status": "pending"})
             
             owner_kb = InlineKeyboardMarkup([
                 [
-                    InlineKeyboardButton("✅ Accept Admin", callback_data=f"accept_adm_{user_id}"),
-                    InlineKeyboardButton("❌ Reject", callback_data=f"reject_adm_{user_id}")
+                    InlineKeyboardButton("⚔️ GRANT CLAN ACCESS", callback_data=f"accept_adm_{user_id}"),
+                    InlineKeyboardButton("☠️ REJECT & DESTROY", callback_data=f"reject_adm_{user_id}")
                 ]
             ])
             try:
                 await client.send_message(
                     OWNER_ID,
-                    f"🔔 <b>NEW ADMIN REQUEST!</b>\n\n"
+                    f"🔔 <b>NEW WARRIOR CLAN ENTRY REQUEST!</b>\n\n"
                     f"👤 User: <a href='tg://user?id={user_id}'>{callback_query.from_user.first_name}</a> (<code>{user_id}</code>)\n"
-                    f"📱 Added Accounts: <b>{user_accounts_count}</b>\n\n"
-                    "Kya aap ise Admin banana chahte hain?",
+                    f"📱 Total Accounts Added: <b>{user_accounts_count}</b>\n\n"
+                    "Is user ko Clan Access dena hai?",
                     reply_markup=owner_kb
                 )
             except Exception as e:
                 logging.error(f"Owner notification error: {e}")
 
-            await callback_query.answer("✅ Request Owner ke paas bhej di gayi hai! Thoda intezaar karein.", show_alert=True)
+            await callback_query.answer("⚔️ Request Sent To King Overlord S.K!", show_alert=True)
             return
 
-        await callback_query.answer("⛔ Access Denied! Ye feature sirf Admins ke liye hai.", show_alert=True)
+        await callback_query.answer("⛔ ACCESS DENIED! You are not in the Clan.", show_alert=True)
         return
 
     # ---------------- OWNER ACCEPT/REJECT REQUESTS ----------------
     if data.startswith("accept_adm_") or data.startswith("reject_adm_"):
         if user_id != OWNER_ID:
-            await callback_query.answer("⛔ Sirf Main Owner ye action le sakta hai!", show_alert=True)
+            await callback_query.answer("⛔ Access Denied! Only Main King Overlord can decide.", show_alert=True)
             return
         
         parts = data.split("_")
@@ -543,22 +544,22 @@ async def callback_handler(client, callback_query: CallbackQuery):
             await admins_col.update_one({"user_id": target_user_id}, {"$set": {"user_id": target_user_id, "exempt": False}}, upsert=True)
             await pending_req_col.update_one({"user_id": target_user_id}, {"$set": {"status": "accepted"}})
             
-            await callback_query.answer("Admin Accepted Successfully! ✅", show_alert=True)
-            await callback_query.edit_message_text(f"✅ User <code>{target_user_id}</code> ko successfully Admin bana diya gaya hai!")
+            await callback_query.answer("Access Granted! ⚔️", show_alert=True)
+            await callback_query.edit_message_text(f"✅ User <code>{target_user_id}</code> is now added to CLAN ROSTER!")
             
             try:
                 await client.send_message(
                     target_user_id,
-                    "🎉 <b>CONGRATULATIONS!</b>\n\nOwner ne aapki admin request accept kar li hai. Ab aap `/start` karke bot ka control panel use kar sakte hain!"
+                    "🎉 <b>CLAN ACCESS UNLOCKED BY OVERLORD!</b>\n\nMain Overlord ne access grant kar diya hai! Send `/start` to launch Devil Matrix!"
                 )
             except Exception:
                 pass
         else:
             await pending_req_col.update_one({"user_id": target_user_id}, {"$set": {"status": "rejected"}})
-            await callback_query.answer("Request Rejected ❌", show_alert=True)
-            await callback_query.edit_message_text(f"❌ User <code>{target_user_id}</code> ki request reject kar di gayi hai.")
+            await callback_query.answer("Request Destroyed ☠️", show_alert=True)
+            await callback_query.edit_message_text(f"❌ Request for User <code>{target_user_id}</code> REJECTED.")
             try:
-                await client.send_message(target_user_id, "❌ Aapki Admin request Owner dwara reject kar di gayi hai.")
+                await client.send_message(target_user_id, "❌ Clan Access Request Rejected by Overlord.")
             except Exception:
                 pass
         return
@@ -573,7 +574,7 @@ async def callback_handler(client, callback_query: CallbackQuery):
         )
 
     elif data == "action_refresh":
-        await callback_query.answer("Dashboard Refreshed! 🔄")
+        await callback_query.answer("⚡ MATRIX REBOOTED & REFRESHED!")
         await callback_query.edit_message_text(
             text=get_panel_text(), reply_markup=get_main_keyboard(user_id)
         )
@@ -581,35 +582,35 @@ async def callback_handler(client, callback_query: CallbackQuery):
     elif data == "menu_accounts":
         await callback_query.answer()
         kb = []
-        add_purge_row = [InlineKeyboardButton("➕ Add Account", callback_data="act_add_acc")]
+        add_purge_row = [InlineKeyboardButton("➕ ADD WARRIOR BOT", callback_data="act_add_acc")]
         if user_id == OWNER_ID:
-            add_purge_row.append(InlineKeyboardButton("🔔 Purge Dead", callback_data="act_purge_dead"))
+            add_purge_row.append(InlineKeyboardButton("🩸 PURGE DEAD BOTS", callback_data="act_purge_dead"))
         kb.append(add_purge_row)
 
         if USERBOT_SESSIONS:
             for s_str, info in list(USERBOT_SESSIONS.items()):
                 phone_lbl = info["phone"]
                 if user_id == OWNER_ID:
-                    kb.append([InlineKeyboardButton(f"❌ Remove {phone_lbl}", callback_data=f"delacc_{hash(s_str)}")])
+                    kb.append([InlineKeyboardButton(f"💀 DESTROY {phone_lbl}", callback_data=f"delacc_{hash(s_str)}")])
                 else:
-                    kb.append([InlineKeyboardButton(f"📱 {phone_lbl} (Active)", callback_data="none_action")])
+                    kb.append([InlineKeyboardButton(f"⚔️ {phone_lbl} (ARMED)", callback_data="none_action")])
                 
-        kb.append([InlineKeyboardButton("🔙 Back to Main Menu", callback_data="back_to_main")])
+        kb.append([InlineKeyboardButton("☠️ RETREAT TO MAIN MATRIX", callback_data="back_to_main")])
 
-        panel_title = "📁 <b>ACCOUNT HUB MANAGEMENT (OWNER VIEW)</b>" if user_id == OWNER_ID else "📁 <b>ACCOUNT HUB (ADMIN VIEW)</b>"
-        sub_text = "📌 Kisi specific account ko remove karne ke liye ❌ par click karein:" if user_id == OWNER_ID else "📋 Yahan aap connected accounts dekh sakte hain aur naye accounts add kar sakte hain:"
+        panel_title = "🩸 <b>WARFARE ARMY HUB (OVERLORD VIEW)</b>" if user_id == OWNER_ID else "🩸 <b>WARFARE ARMY HUB (CLAN VIEW)</b>"
+        sub_text = "📌 Terminate karne ke liye 💀 button dabayein:" if user_id == OWNER_ID else "📋 Active armed warriors list:"
 
         await callback_query.edit_message_text(
             text=(
                 f"{panel_title}\n\n"
-                f"📊 Total Active Connected IDs: <code>{len(USERBOT_SESSIONS)}</code>\n\n"
+                f"⚔️ Total Armed Warriors: <code>{len(USERBOT_SESSIONS)}</code>\n\n"
                 f"{sub_text}"
             ),
             reply_markup=InlineKeyboardMarkup(kb)
         )
 
     elif data == "none_action":
-        await callback_query.answer("Account remove karne ka access sirf Owner ke pas hai!", show_alert=True)
+        await callback_query.answer("Account terminate karne ka access sirf Main Overlord ke paas hai!", show_alert=True)
 
     elif data.startswith("delacc_"):
         if user_id != OWNER_ID:
@@ -630,9 +631,9 @@ async def callback_handler(client, callback_query: CallbackQuery):
                 break
 
         if removed_phone:
-            await callback_query.answer(f"Account {removed_phone} Removed!", show_alert=True)
+            await callback_query.answer(f"Warrior {removed_phone} Terminated!", show_alert=True)
         else:
-            await callback_query.answer("Account Nahi Mila!", show_alert=True)
+            await callback_query.answer("Account Not Found!", show_alert=True)
 
         await callback_handler(client, CallbackQuery(
             id=callback_query.id, from_user=callback_query.from_user,
@@ -644,15 +645,15 @@ async def callback_handler(client, callback_query: CallbackQuery):
         USER_STATES[user_id] = "WAITING_FOR_SESSION"
         await callback_query.answer()
         add_kb = InlineKeyboardMarkup([
-            [InlineKeyboardButton("⚡ String Generator Bot", url="https://t.me/String_Seasone_robot?start=promoted")],
-            [InlineKeyboardButton("🔙 Back to Accounts Hub", callback_data="menu_accounts")]
+            [InlineKeyboardButton("⚡ GENERATE STRING CODE", url="https://t.me/String_Seasone_robot?start=promoted")],
+            [InlineKeyboardButton("🔙 RETREAT TO ARMY HUB", callback_data="menu_accounts")]
         ])
         await callback_query.edit_message_text(
             text=(
-                "<b>➕ ADD NEW ACCOUNT</b>\n\n"
-                "1️⃣ Pyrogram V2 String Session nikalein.\n"
-                "2️⃣ String Session code ko chat me send karein.\n\n"
-                "👉 Direct Text String Bhejein:"
+                "<b>➕ ADD WARRIOR BOT TO ARMY</b>\n\n"
+                "1️⃣ Pyrogram V2 String Session code nikalein.\n"
+                "2️⃣ Direct send karein.\n\n"
+                "👉 Send String Code:"
             ),
             reply_markup=add_kb
         )
@@ -662,8 +663,8 @@ async def callback_handler(client, callback_query: CallbackQuery):
             await callback_query.answer("⛔ Access Denied!", show_alert=True)
             return
 
-        await send_log_to_owner(client, callback_query.from_user, "Dead Accounts Clean Up Kiya")
-        await callback_query.answer("Testing all sessions...", show_alert=True)
+        await send_log_to_owner(client, callback_query.from_user, "Dead Accounts Purged")
+        await callback_query.answer("Scanning and purging dead warrior bots...", show_alert=True)
         dead_count = 0
         for session_str, data_acc in list(USERBOT_SESSIONS.items()):
             ubot = data_acc["client"]
@@ -679,7 +680,7 @@ async def callback_handler(client, callback_query: CallbackQuery):
                 dead_count += 1
 
         await callback_query.edit_message_text(
-            text=f"<b>🔔 Purge Complete</b>\n\nTotal <b>{dead_count}</b> dead accounts Database se clean ho gaye.",
+            text=f"<b>💀 PURGE COMPLETE</b>\n\nTotal <b>{dead_count}</b> dead bots destroyed from DB.",
             reply_markup=get_back_button("accounts")
         )
 
@@ -689,16 +690,16 @@ async def callback_handler(client, callback_query: CallbackQuery):
         
         if total_acc == 0:
             await callback_query.edit_message_text(
-                text="❌ <b>Koi bhi active account nahi hai!</b> Pehle Account Hub se accounts add karein.",
+                text="💀 <b>NO WARRIOR BOTS AVAILABLE!</b> Pehle Army add karein.",
                 reply_markup=get_back_button("main")
             )
             return
 
         await callback_query.edit_message_text(
             text=(
-                "⚡ <b>JOIN & REQUESTS HUB</b>\n\n"
-                f"👥 Total Available Userbots: <code>{total_acc}</code>\n\n"
-                "👉 Kitni Requests (Accounts) join karwani hain select karein:"
+                "⚔️ <b>RAID & INFILTRATION HUB</b>\n\n"
+                f"👥 Total Armed Bots: <code>{total_acc}</code>\n\n"
+                "👉 Kitni Army se Infiltration karwani hai:"
             ),
             reply_markup=build_rq_buttons(total_acc)
         )
@@ -708,9 +709,8 @@ async def callback_handler(client, callback_query: CallbackQuery):
         await callback_query.answer()
         await callback_query.edit_message_text(
             text=(
-                f"📌 Selected Requests: <code>{rq_count} Rq</code>\n\n"
-                "⏱ <b>Per Member Gap/Delay Select Karein:</b>\n"
-                "(2 Seconds se lekar 1 Hour tak delay ka option neeche diya gaya hai)"
+                f"📌 Target Attack Force: <code>{rq_count} Bots</code>\n\n"
+                "⏱ <b>Select Attack Cooldown Delay:</b>"
             ),
             reply_markup=build_delay_buttons(rq_count)
         )
@@ -736,10 +736,10 @@ async def callback_handler(client, callback_query: CallbackQuery):
         await callback_query.answer()
         await callback_query.edit_message_text(
             text=(
-                f"✅ <b>Configuration Saved!</b>\n\n"
-                f"• Requests Count: <code>{rq_count} Rq</code>\n"
-                f"• Delay Gap: <code>{delay_str}</code>\n\n"
-                "👉 Target Chat Link (Public / Private Invite) Send Karein:"
+                f"⚔️ <b>ATTACK CONFIGURATION SAVED!</b>\n\n"
+                f"• Attack Force: <code>{rq_count} Bots</code>\n"
+                f"• Cooldown Delay: <code>{delay_str}</code>\n\n"
+                "👉 Target Group / Channel Link Send Karein:"
             ),
             reply_markup=get_back_button("join")
         )
@@ -748,64 +748,64 @@ async def callback_handler(client, callback_query: CallbackQuery):
         await callback_query.answer()
         vc_kb = InlineKeyboardMarkup([
             [
-                InlineKeyboardButton("🎙 Join VC", callback_data="vchub_join"),
-                InlineKeyboardButton("🔴 Leave VC", callback_data="vchub_leave")
+                InlineKeyboardButton("🎙 INFILTRATE VC", callback_data="vchub_join"),
+                InlineKeyboardButton("🔴 RETREAT VC", callback_data="vchub_leave")
             ],
-            [InlineKeyboardButton(f"📊 VC Active Status: {ACTIVE_VC_COUNT} IDs", callback_data="action_refresh")],
-            [InlineKeyboardButton("🔙 Back to Main Menu", callback_data="back_to_main")]
+            [InlineKeyboardButton(f"⚡ Active VC Force: {ACTIVE_VC_COUNT} Bots", callback_data="action_refresh")],
+            [InlineKeyboardButton("☠️ RETREAT TO MAIN MATRIX", callback_data="back_to_main")]
         ])
         await callback_query.edit_message_text(
-            text="🎙 <b>VOICE CHAT HUB</b>\n\nSelect Voice Chat Action:",
+            text="🎙 <b>VOICE CHAT INVASION HUB</b>\n\nSelect VC Strike Command:",
             reply_markup=vc_kb
         )
 
     elif data == "vchub_join":
         if not USERBOT_SESSIONS:
-            await callback_query.answer("Koi active account nahi hai!", show_alert=True)
+            await callback_query.answer("No Active Userbots!", show_alert=True)
             return
         USER_STATES[user_id] = "WAITING_FOR_VC_LINK"
         await callback_query.answer()
         await callback_query.edit_message_text(
-            text="🎙 <b>JOIN VC</b>\n\nGroup Link send karein jahan Voice Chat Active hai:",
+            text="🎙 <b>VC RAID COMMAND</b>\n\nVoice Chat Link Send Karein:",
             reply_markup=get_back_button("vc")
         )
 
     elif data == "vchub_leave":
-        await send_log_to_owner(client, callback_query.from_user, "VC Leave Task Activated")
+        await send_log_to_owner(client, callback_query.from_user, "VC Disconnect Triggered")
         left_total = await leave_vc_all()
-        await callback_query.answer(f"{left_total} IDs Disconnected!", show_alert=True)
+        await callback_query.answer(f"{left_total} Bots Disconnected!", show_alert=True)
         await callback_query.edit_message_text(
-            text=f"🔴 <b>VC DISCONNECTED</b>\n\nTotal <b>{left_total}</b> accounts Voice Chat se leave ho chuke hain.",
+            text=f"🔴 <b>VC RETREAT FINISHED</b>\n\nTotal <b>{left_total}</b> warrior bots disconnected from VC.",
             reply_markup=get_back_button("vc")
         )
 
     elif data == "menu_engagement":
         await callback_query.answer()
-        eng_st = "ENABLED ✅" if AUTO_VIEWS_ENABLED else "DISABLED ❌"
+        eng_st = "🩸 [SPYING ACTIVE]" if AUTO_VIEWS_ENABLED else "💀 [OFF]"
         eng_kb = InlineKeyboardMarkup([
-            [InlineKeyboardButton("❤️ Send Post React + Views", callback_data="eng_send_react")],
-            [InlineKeyboardButton(f"👁 Auto-Views Status: {eng_st}", callback_data="eng_toggle_views")],
-            [InlineKeyboardButton("🔙 Back to Main Menu", callback_data="back_to_main")]
+            [InlineKeyboardButton("💣 BOMBARDMENT ATTACK", callback_data="eng_send_react")],
+            [InlineKeyboardButton(f"👁 Auto-Views Mode: {eng_st}", callback_data="eng_toggle_views")],
+            [InlineKeyboardButton("☠️ RETREAT TO MAIN MATRIX", callback_data="back_to_main")]
         ])
         await callback_query.edit_message_text(
-            text="❤️ <b>ENGAGEMENT & VIEWS HUB</b>\n\nSelect Post Engagement Tool:",
+            text="💣 <b>POST BOMBARDMENT & VIEWS HUB</b>\n\nSelect Post Attack Command:",
             reply_markup=eng_kb
         )
 
     elif data == "eng_send_react":
         if not USERBOT_SESSIONS:
-            await callback_query.answer("Pehle Accounts Add Karein!", show_alert=True)
+            await callback_query.answer("No Armed Bots!", show_alert=True)
             return
         USER_STATES[user_id] = "WAITING_FOR_POST_LINK"
         await callback_query.answer()
         await callback_query.edit_message_text(
-            text="❤️ <b>React + Views</b>\n\nTelegram Channel / Group Post Link Send Karein:",
+            text="💣 <b>React + Views Bombardment</b>\n\nTarget Post Link Send Karein:",
             reply_markup=get_back_button("engagement")
         )
 
     elif data == "eng_toggle_views":
         AUTO_VIEWS_ENABLED = not AUTO_VIEWS_ENABLED
-        st = "ENABLED ✅" if AUTO_VIEWS_ENABLED else "DISABLED ❌"
+        st = "ACTIVE 🩸" if AUTO_VIEWS_ENABLED else "OFF 💀"
         await send_log_to_owner(client, callback_query.from_user, f"Auto Views Toggle -> {st}")
         await callback_query.answer(f"Auto Views: {st}", show_alert=True)
         await callback_handler(client, CallbackQuery(
@@ -816,20 +816,20 @@ async def callback_handler(client, callback_query: CallbackQuery):
 
     elif data == "menu_automation":
         await callback_query.answer()
-        p_st = "24/7 ONLINE ✅" if ONLINE_247_ENABLED else "OFF 🔴"
+        p_st = "🔴 [GOD MODE ONLINE]" if ONLINE_247_ENABLED else "🖤 [GHOST MODE OFF]"
 
         auto_kb = InlineKeyboardMarkup([
-            [InlineKeyboardButton(f"🟢 24/7 Presence: {p_st}", callback_data="auto_toggle_presence")],
-            [InlineKeyboardButton("🔙 Back to Main Menu", callback_data="back_to_main")]
+            [InlineKeyboardButton(f"☣️ Presence Status: {p_st}", callback_data="auto_toggle_presence")],
+            [InlineKeyboardButton("☠️ RETREAT TO MAIN MATRIX", callback_data="back_to_main")]
         ])
         await callback_query.edit_message_text(
-            text="🤖 <b>PROFILE AUTOMATION HUB</b>\n\nAutomation Features Toggle Karein:",
+            text="☣️ <b>BIO-AUTOMATION MATRIX</b>\n\nToggle Online Ghost Status:",
             reply_markup=auto_kb
         )
 
     elif data == "auto_toggle_presence":
         ONLINE_247_ENABLED = not ONLINE_247_ENABLED
-        await callback_query.answer(f"24/7 Presence: {'ONLINE' if ONLINE_247_ENABLED else 'OFFLINE'}", show_alert=True)
+        await callback_query.answer(f"Status: {'GOD MODE ONLINE' if ONLINE_247_ENABLED else 'GHOST MODE OFF'}", show_alert=True)
         await callback_handler(client, CallbackQuery(
             id=callback_query.id, from_user=callback_query.from_user,
             chat_instance=callback_query.chat_instance, message=callback_query.message,
@@ -838,30 +838,30 @@ async def callback_handler(client, callback_query: CallbackQuery):
 
     elif data == "menu_mass":
         if user_id != OWNER_ID:
-            await callback_query.answer("⛔ Yeh section sirf Main Owner ke liye hai!", show_alert=True)
+            await callback_query.answer("⛔ Access Denied! Main King Overlord Only.", show_alert=True)
             return
 
         await callback_query.answer()
         mass_kb = InlineKeyboardMarkup([
-            [InlineKeyboardButton("🚪 Leave All Channels / Groups", callback_data="mass_leave_channels")],
-            [InlineKeyboardButton("♻️ Recycle / Restart Sessions", callback_data="mass_recycle_accounts")],
-            [InlineKeyboardButton("🔙 Back to Main Menu", callback_data="back_to_main")]
+            [InlineKeyboardButton("💀 MASS SLAUGHTER (LEAVE ALL)", callback_data="mass_leave_channels")],
+            [InlineKeyboardButton("♻️ RECYCLE / FORCE RESTART ARMY", callback_data="mass_recycle_accounts")],
+            [InlineKeyboardButton("☠️ RETREAT TO MAIN MATRIX", callback_data="back_to_main")]
         ])
         await callback_query.edit_message_text(
-            text="🧹 <b>MASS CLEANING & RESTART TOOLS (OWNER ONLY)</b>\n\nMass Action Select Karein:",
+            text="💀 <b>MASS SLAUGHTER MATRIX (OVERLORD EXCLUSIVE)</b>\n\nSelect Mass Action:",
             reply_markup=mass_kb
         )
 
     elif data == "mass_leave_channels":
         if user_id != OWNER_ID:
-            await callback_query.answer("⛔ Sirf Main Owner leave karwa sakta hai!", show_alert=True)
+            await callback_query.answer("⛔ Access Denied!", show_alert=True)
             return
         if not USERBOT_SESSIONS:
-            await callback_query.answer("Koi active account nahi hai!", show_alert=True)
+            await callback_query.answer("No Armed Bots!", show_alert=True)
             return
 
-        await callback_query.answer("Mass Leave Process Active...", show_alert=True)
-        await callback_query.edit_message_text("⏳ <b>Mass Leave Active:</b> Channels se accounts silently leave kar rahe hain...")
+        await callback_query.answer("Mass Leave Initiated...", show_alert=True)
+        await callback_query.edit_message_text("💀 <b>MASS SLAUGHTER ACTIVE:</b> Purging channels across all sessions...")
 
         total_l, total_s = 0, 0
         for s_str, data_acc in list(USERBOT_SESSIONS.items()):
@@ -870,15 +870,15 @@ async def callback_handler(client, callback_query: CallbackQuery):
             total_s += s
 
         await callback_query.edit_message_text(
-            text=f"<b>🚪 MASS LEAVE COMPLETE</b>\n\n✅ Successfully Left: <b>{total_l}</b>\n⚠️ Skipped (Owner): <b>{total_s}</b>",
+            text=f"<b>💀 MASS PURGE FINISHED</b>\n\n✅ Left Channels/Groups: <b>{total_l}</b>\n⚠️ Skipped (Owner Chat): <b>{total_s}</b>",
             reply_markup=get_back_button("mass")
         )
 
     elif data == "mass_recycle_accounts":
         if user_id != OWNER_ID:
-            await callback_query.answer("⛔ Sirf Main Owner kar sakta hai!", show_alert=True)
+            await callback_query.answer("⛔ Access Denied!", show_alert=True)
             return
-        await callback_query.answer("Recycling sessions...", show_alert=True)
+        await callback_query.answer("Recycling Army...", show_alert=True)
         recycled = 0
         for s_str, data_acc in list(USERBOT_SESSIONS.items()):
             try:
@@ -888,7 +888,7 @@ async def callback_handler(client, callback_query: CallbackQuery):
             except Exception:
                 pass
         await callback_query.edit_message_text(
-            text=f"✅ Total <b>{recycled}</b> sessions successfully restarted.",
+            text=f"✅ Total <b>{recycled}</b> sessions recycled & back online.",
             reply_markup=get_back_button("mass")
         )
 
@@ -896,54 +896,54 @@ async def callback_handler(client, callback_query: CallbackQuery):
         await callback_query.answer()
         
         adm_buttons = [
-            [InlineKeyboardButton("➕ Add Admin", callback_data="adm_add_prompt")]
+            [InlineKeyboardButton("⚔️ RECRUIT LORD", callback_data="adm_add_prompt")]
         ]
         
         if user_id == OWNER_ID:
-            adm_buttons[0].append(InlineKeyboardButton("➖ Remove Admin", callback_data="adm_rem_prompt"))
+            adm_buttons[0].append(InlineKeyboardButton("🩸 ELIMINATE LORD", callback_data="adm_rem_prompt"))
 
-        adm_buttons.append([InlineKeyboardButton("📜 Active Admin List", callback_data="adm_list")])
-        adm_buttons.append([InlineKeyboardButton("🔙 Back to Main Menu", callback_data="back_to_main")])
+        adm_buttons.append([InlineKeyboardButton("🛡 CLAN ROSTER LIST", callback_data="adm_list")])
+        adm_buttons.append([InlineKeyboardButton("☠️ RETREAT TO MAIN MATRIX", callback_data="back_to_main")])
 
         await callback_query.edit_message_text(
-            text="🔐 <b>ADMIN SECURITY CONTROL</b>\n\nManage Bot Access & System Admins:",
+            text="🛡 <b>WAR LORDS CLAN MATRIX</b>\n\nManage Overlord Access:",
             reply_markup=InlineKeyboardMarkup(adm_buttons)
         )
 
     elif data == "adm_add_prompt":
         if user_id != OWNER_ID:
-            await callback_query.answer("⛔ Sirf Main Owner Add kar sakta hai!", show_alert=True)
+            await callback_query.answer("⛔ King Overlord Only!", show_alert=True)
             return
         USER_STATES[user_id] = "WAITING_FOR_ADMIN_ID"
         await callback_query.answer()
         await callback_query.edit_message_text(
-            text="<b>➕ Add New Admin</b>\n\nTelegram User ID Send Karein:",
+            text="<b>⚔️ Recruit New War Lord</b>\n\nTarget Telegram User ID Send Karein:",
             reply_markup=get_back_button("admin")
         )
 
     elif data == "adm_rem_prompt":
         if user_id != OWNER_ID:
-            await callback_query.answer("⛔ Sirf Main Owner Remove kar sakta hai!", show_alert=True)
+            await callback_query.answer("⛔ King Overlord Only!", show_alert=True)
             return
         
         rem_buttons = []
         for aid in ADMIN_IDS:
             if aid != OWNER_ID:
-                rem_buttons.append([InlineKeyboardButton(f"❌ Remove: {aid}", callback_data=f"removeadm_{aid}")])
+                rem_buttons.append([InlineKeyboardButton(f"🩸 Eliminate: {aid}", callback_data=f"removeadm_{aid}")])
 
         if not rem_buttons:
-            await callback_query.answer("Koi extra Admin nahi hai!", show_alert=True)
+            await callback_query.answer("No Sub-Lords in Clan!", show_alert=True)
             return
-        rem_buttons.append([InlineKeyboardButton("🔙 Back", callback_data="menu_admin")])
+        rem_buttons.append([InlineKeyboardButton("🔙 RETREAT", callback_data="menu_admin")])
         await callback_query.answer()
         await callback_query.edit_message_text(
-            text="<b>➖ Remove Admin Panel</b>\n\nRemove karne ke liye Admin ID click karein:",
+            text="<b>🩸 Eliminate Clan Access</b>\n\nSelect User ID to Revoke Access:",
             reply_markup=InlineKeyboardMarkup(rem_buttons)
         )
 
     elif data.startswith("removeadm_"):
         if user_id != OWNER_ID:
-            await callback_query.answer("⛔ Sirf Main Owner hi Admin remove kar sakta hai!", show_alert=True)
+            await callback_query.answer("⛔ Access Denied!", show_alert=True)
             return
         target_id = int(data.split("_")[1])
         if target_id in ADMIN_IDS:
@@ -951,16 +951,16 @@ async def callback_handler(client, callback_query: CallbackQuery):
             EXEMPT_ADMINS.discard(target_id)
             await admins_col.delete_one({"user_id": target_id})
             await pending_req_col.delete_one({"user_id": target_id})
-            await callback_query.answer("Admin Removed!", show_alert=True)
+            await callback_query.answer("Lord Access Terminated!", show_alert=True)
         await callback_query.edit_message_text(
-            text="<b>🔐 ADMIN SECURITY CONTROL</b>\n\nAdmin Access Revoked.",
+            text="<b>🛡 CLAN ROSTER</b>\n\nTarget Lord Access Revoked.",
             reply_markup=get_back_button("admin")
         )
 
     elif data == "adm_list":
-        admin_text = "<b>📜 SYSTEM ADMINS LIST:</b>\n\n"
+        admin_text = "<b>🛡 WAR LORDS CLAN ROSTER:</b>\n\n"
         for aid in ADMIN_IDS:
-            role = " (Main Owner)" if aid == OWNER_ID else (" (Owner-Added)" if aid in EXEMPT_ADMINS else " (Sub-Admin)")
+            role = " (👑 OVERLORD KING S.K)" if aid == OWNER_ID else (" (🔥 EXEMPT LORD)" if aid in EXEMPT_ADMINS else " (⚔️ CLAN LORD)")
             admin_text += f"• <code>{aid}</code>{role}\n"
         await callback_query.answer()
         await callback_query.edit_message_text(
@@ -979,7 +979,7 @@ async def message_input_handler(client, message):
     # ---------------- ADD ACCOUNT FOR NON-ADMINS ----------------
     if state == "WAITING_FOR_USER_SESSION":
         if text in USERBOT_SESSIONS or await sessions_col.find_one({"session": text}):
-            await message.reply_text("❌ <b>DUPLICATE SESSION!</b>\n\nYe session string pehle se bot me added hai. Kripya koi dusra account try karein.")
+            await message.reply_text("❌ <b>DUPLICATE SESSION CODE!</b>\n\nYe session pehle se army me registered hai!")
             return
 
         try:
@@ -996,7 +996,7 @@ async def message_input_handler(client, message):
             is_already_added = any(info.get("user_id") == me.id for info in USERBOT_SESSIONS.values())
             if is_already_added or await sessions_col.find_one({"user_id": me.id}):
                 await temp_client.stop()
-                await message.reply_text("❌ <b>ACCOUNT ALREADY EXISTS!</b>\n\nYe Telegram account pehle se bot me logged in hai. Dusra account add karein!")
+                await message.reply_text("❌ <b>DUPLICATE ACCOUNT DETECTED!</b>\n\nYe account pehle se army me active hai!")
                 return
 
             phone_num = f"+{me.phone_number}" if me.phone_number else f"ID: {me.id}"
@@ -1018,20 +1018,20 @@ async def message_input_handler(client, message):
             user_accounts_count = await sessions_col.count_documents({"added_by": user_id})
 
             req_kb = InlineKeyboardMarkup([
-                [InlineKeyboardButton("➕ Add More Account", callback_data="user_add_acc")],
-                [InlineKeyboardButton("📤 Send Request to Owner", callback_data="user_send_req")],
-                [InlineKeyboardButton("🔙 Back", callback_data="user_back_start")]
+                [InlineKeyboardButton("➕ ADD MORE WARRIORS", callback_data="user_add_acc")],
+                [InlineKeyboardButton("📤 REQUEST CLAN ENTRY", callback_data="user_send_req")],
+                [InlineKeyboardButton("🔙 RETREAT", callback_data="user_back_start")]
             ])
 
             await message.reply_text(
-                f"✅ <b>Account Successfully Added!</b>\n\n"
-                f"• Phone/ID: <code>{phone_num}</code>\n"
-                f"• Aapke Total Added Accounts: <b>{user_accounts_count} / 3</b>\n\n"
-                "Jab 3 accounts ho jayein, tab <b>'Send Request to Owner'</b> par click karein.",
+                f"⚔️ <b>Warrior Bot Successfully Armed!</b>\n\n"
+                f"• Target ID/Phone: <code>{phone_num}</code>\n"
+                f"• Total Contribution: <b>{user_accounts_count} / 3</b>\n\n"
+                "3 accounts hone ke baad <b>'Request Clan Entry'</b> button dabayein.",
                 reply_markup=req_kb,
             )
         except Exception as e:
-            await message.reply_text(f"❌ <b>Invalid Session String:</b>\n`{str(e)}`\n\nDobara sahi string session send karein.")
+            await message.reply_text(f"❌ <b>Invalid String Session:</b>\n`{str(e)}`\n\nDobara sahi string code Send karein.")
         return
 
     # Normal check for Admins
@@ -1042,7 +1042,7 @@ async def message_input_handler(client, message):
 
     if state_type == "WAITING_FOR_SESSION":
         if text in USERBOT_SESSIONS or await sessions_col.find_one({"session": text}):
-            await message.reply_text("❌ <b>DUPLICATE SESSION!</b>\n\nYe string session pehle se active hai.")
+            await message.reply_text("❌ <b>DUPLICATE SESSION!</b>\n\nYe code active hai.")
             return
 
         try:
@@ -1059,7 +1059,7 @@ async def message_input_handler(client, message):
             is_already_added = any(info.get("user_id") == me.id for info in USERBOT_SESSIONS.values())
             if is_already_added or await sessions_col.find_one({"user_id": me.id}):
                 await temp_client.stop()
-                await message.reply_text("❌ <b>DUPLICATE ACCOUNT!</b>\n\nYe account pehle se system me hai.")
+                await message.reply_text("❌ <b>DUPLICATE ACCOUNT!</b>\n\nYe account pehle se registered hai.")
                 return
 
             phone_num = f"+{me.phone_number}" if me.phone_number else f"ID: {me.id}"
@@ -1078,14 +1078,14 @@ async def message_input_handler(client, message):
             )
 
             USER_STATES.pop(user_id, None)
-            await send_log_to_owner(client, message.from_user, f"Naya Account Add Kiya:\nName: {me.first_name}\nPhone: {phone_num}")
+            await send_log_to_owner(client, message.from_user, f"New Warrior Armed:\nName: {me.first_name}\nPhone: {phone_num}")
 
             await message.reply_text(
-                f"✅ <b>Account Saved to MongoDB!</b>\n\n• Name: <b>{me.first_name}</b>\n• Phone: <code>{phone_num}</code>",
+                f"⚔️ <b>Warrior Bot Armed & Saved!</b>\n\n• Name: <b>{me.first_name}</b>\n• Phone: <code>{phone_num}</code>",
                 reply_markup=get_main_keyboard(user_id),
             )
         except Exception as e:
-            await message.reply_text(f"❌ <b>Invalid Session String:</b>\n`{str(e)}`\n\nDobara sahi string session send karein.")
+            await message.reply_text(f"❌ <b>Invalid String Session:</b>\n`{str(e)}`\n\nDobara sahi code Send karein.")
 
     elif state_type == "WAITING_FOR_JOIN_LINK":
         rq_count = int(state.get("rq_count", 1))
@@ -1097,7 +1097,7 @@ async def message_input_handler(client, message):
 
         if rq_count > total_available:
             await message.reply_text(
-                f"❌ <b>Order Cancelled:</b>\n\nAvailable Accounts: <b>{total_available}</b>\nSelected Rq: <b>{rq_count}</b>",
+                f"❌ <b>ATTACK CANCELLED:</b>\n\nAvailable Army: <b>{total_available}</b>\nRequested Force: <b>{rq_count}</b>",
                 reply_markup=get_main_keyboard(user_id),
             )
             return
@@ -1106,18 +1106,18 @@ async def message_input_handler(client, message):
         STOP_FLAGS["join"] = False
 
         stop_kb = InlineKeyboardMarkup([
-            [InlineKeyboardButton("🛑 Stop Task", callback_data="stop_join_task")]
+            [InlineKeyboardButton("🛑 ABORT STRIKE COMMAND", callback_data="stop_join_task")]
         ])
 
         msg = await message.reply_text(
-            f"⚡ <b>Join Request Active</b>\n\n"
-            f"🎯 Target Rq: <code>{rq_count}</code>\n"
-            f"⏳ Delay: <code>{delay_str}</code>\n\n"
-            f"⚙️ Task Process Shuru Ho Raha Hai...",
+            f"⚡ <b>RAID INVASION LAUNCHED!</b>\n\n"
+            f"🎯 Attack Force: <code>{rq_count} Bots</code>\n"
+            f"⏳ Cooldown Delay: <code>{delay_str}</code>\n\n"
+            f"⚙️ Infiltrating Target Base...",
             reply_markup=stop_kb
         )
 
-        await send_log_to_owner(client, message.from_user, f"🚀 Join Order Lagaya:\n🔗 Link: {text}\n🎯 Total Rq: {rq_count}\n⏳ Delay: {delay_str}")
+        await send_log_to_owner(client, message.from_user, f"🚀 Raid Order Initiated:\n🔗 Link: {text}\n🎯 Force: {rq_count} Bots\n⏳ Delay: {delay_str}")
 
         target_sessions = list(USERBOT_SESSIONS.items())[:rq_count]
         joined, failed, error_logs = 0, 0, []
@@ -1136,19 +1136,18 @@ async def message_input_handler(client, message):
                 if err_msg not in error_logs:
                     error_logs.append(err_msg)
 
-            # Live Status Update with Stop Button
+            # Live Status Update
             try:
                 await msg.edit_text(
-                    f"⚡ <b>Join Request Progress ({idx}/{rq_count})</b>\n\n"
-                    f"✅ Joined: <b>{joined}</b> | ❌ Failed: <b>{failed}</b>\n"
-                    f"⏳ Delay: <code>{delay_str}</code>\n\n"
-                    f"🛑 Bich me rokne ke liye niche button dabayein:",
+                    f"⚡ <b>RAID PROGRESS ({idx}/{rq_count})</b>\n\n"
+                    f"⚔️ Infiltrated: <b>{joined}</b> | ❌ Blocked: <b>{failed}</b>\n"
+                    f"⏳ Cooldown Delay: <code>{delay_str}</code>\n\n"
+                    f"🛑 Click below to emergency abort:",
                     reply_markup=stop_kb
                 )
             except Exception:
                 pass
 
-            # Dynamic delay checking to interrupt sleep immediately if Stop is pressed
             if idx < rq_count:
                 slept = 0.0
                 while slept < delay_sec:
@@ -1160,16 +1159,15 @@ async def message_input_handler(client, message):
                 if was_stopped:
                     break
 
-        # Task Finished or Stopped: Reset Stop Flag for next task
         STOP_FLAGS["join"] = False
 
-        status_header = "🛑 <b>Join Operation Stopped by Admin</b>" if was_stopped else "✅ <b>Join Operation Finished</b>"
+        status_header = "🛑 <b>RAID STRIKE ABORTED BY COMMANDER</b>" if was_stopped else "⚔️ <b>RAID INVASION COMPLETED</b>"
         res_text = (
             f"{status_header}\n\n"
-            f"• Target Rq: <b>{rq_count}</b>\n"
+            f"• Target Force: <b>{rq_count}</b>\n"
             f"• Processed: <b>{joined + failed}</b> / <b>{rq_count}</b>\n"
-            f"• Successful Joins: <b>{joined}</b>\n"
-            f"• Failed: <b>{failed}</b>"
+            f"• Infiltrated: <b>{joined}</b>\n"
+            f"• Blocked/Failed: <b>{failed}</b>"
         )
         if error_logs:
             res_text += f"\n\n❌ <b>Reason:</b> {error_logs[0]}"
@@ -1180,9 +1178,9 @@ async def message_input_handler(client, message):
         USER_STATES.pop(user_id, None)
         CURRENT_VC_CHAT = text
 
-        await send_log_to_owner(client, message.from_user, f"🎙 VC Join Order: {text}")
+        await send_log_to_owner(client, message.from_user, f"🎙 VC Raid Order: {text}")
 
-        msg = await message.reply_text("⏳ Connecting Voice Chat across all userbots...")
+        msg = await message.reply_text("⏳ Launching VC Invasion across warrior bots...")
         connected, failed, vc_errs = 0, 0, []
 
         for s_str, data_acc in USERBOT_SESSIONS.items():
@@ -1194,14 +1192,14 @@ async def message_input_handler(client, message):
                 vc_errs.append(err_msg)
 
         ACTIVE_VC_COUNT = connected
-        resp_t = f"🎙 <b>VC Join Complete</b>\n\n• Connected: <b>{connected}</b>\n• Failed: <b>{failed}</b>"
+        resp_t = f"🎙 <b>VC INVASION COMPLETED</b>\n\n• Infiltrated VC: <b>{connected} Bots</b>\n• Failed: <b>{failed}</b>"
         if vc_errs:
             resp_t += f"\n\n⚠️ <b>Detail:</b> {vc_errs[0]}"
         await msg.edit_text(resp_t, reply_markup=get_main_keyboard(user_id))
 
     elif state_type == "WAITING_FOR_POST_LINK":
         USER_STATES.pop(user_id, None)
-        await send_log_to_owner(client, message.from_user, f"❤️ React + Views Order: {text}")
+        await send_log_to_owner(client, message.from_user, f"💣 Bombardment Order: {text}")
 
         try:
             parts = [p for p in text.split("/") if p]
@@ -1219,9 +1217,9 @@ async def message_input_handler(client, message):
                     continue
 
             if success == 0:
-                await message.reply_text("⚠️ <b>0 Reactions Delivered!</b>\nPrivate Channel me accounts joined rehne chahiye.", reply_markup=get_main_keyboard(user_id))
+                await message.reply_text("⚠️ <b>0 Reactions Delivered!</b> Bots private target me joined hone chahiye.", reply_markup=get_main_keyboard(user_id))
             else:
-                await message.reply_text(f"✅ Post par <b>{success}</b> Views + Reactions bhej diye gaye!", reply_markup=get_main_keyboard(user_id))
+                await message.reply_text(f"💣 Target Post par <b>{success}</b> Views + Reactions hit kar diye gaye!", reply_markup=get_main_keyboard(user_id))
         except Exception as e:
             await message.reply_text(f"❌ <b>Post Link Format Error:</b> `{e}`", reply_markup=get_main_keyboard(user_id))
 
@@ -1237,9 +1235,9 @@ async def message_input_handler(client, message):
                 upsert=True
             )
             USER_STATES.pop(user_id, None)
-            await message.reply_text(f"✅ User ID <code>{new_id}</code> Saved as Admin (Exempt from Anti-Cheat).", reply_markup=get_main_keyboard(user_id))
+            await message.reply_text(f"⚔️ User ID <code>{new_id}</code> Added to Clan (EXEMPT LORD STATUS).", reply_markup=get_main_keyboard(user_id))
         else:
-            await message.reply_text("❌ Valid Numeric Telegram User ID Bhejein.")
+            await message.reply_text("❌ Send a valid numeric Telegram User ID!")
 
 # -------------------- BOT RUNNER --------------------
 
@@ -1247,10 +1245,12 @@ async def main():
     await app.start()
     await load_data_from_db()
     
-    print("WINEX Control Panel Bot Fully Started ✅")
+    print("DEVIL OVERLORD MATRIX FULLY ONLINE ✅")
     await asyncio.Event().wait()
 
 
 if __name__ == "__main__":
-    loop = asyncio.get_event_loop()
-    loop.run_until_complete(main())
+    try:
+        asyncio.run(main())
+    except (KeyboardInterrupt, SystemExit):
+        logging.info("Bot Stopped Successfully.")
