@@ -26,7 +26,6 @@ from pyrogram.types import (
     InlineKeyboardMarkup,
 )
 
-from config_buttons import create_safe_button
 from keep_alive import keep_alive
 
 # Start Web Server for keeping alive on VPS/Render
@@ -278,40 +277,73 @@ async def leave_all_channels_robust(ubot):
         logging.error(f"Leave Channels Error: {e}")
     return left_count, skipped_count
 
-# -------------------- KEYBOARD GENERATORS --------------------
+# =========================================================
+# 🎨 COLOR KEYBOARD BUILDERS WITH DANGER COLORS
+# =========================================================
+
+# Color Emojis: 🔴 RED, 🔵 BLUE, 🟢 GREEN, 💗 PINK
+
+def btn_red(text, callback):
+    return InlineKeyboardButton(f"🔴 {text}", callback_data=callback)
+
+def btn_blue(text, callback):
+    return InlineKeyboardButton(f"🔵 {text}", callback_data=callback)
+
+def btn_green(text, callback):
+    return InlineKeyboardButton(f"🟢 {text}", callback_data=callback)
+
+def btn_pink(text, callback):
+    return InlineKeyboardButton(f"💗 {text}", callback_data=callback)
+
+def btn_danger(text, callback):
+    return InlineKeyboardButton(f"🔴 {text}", callback_data=callback)
+
+def btn_primary(text, callback):
+    return InlineKeyboardButton(f"🔵 {text}", callback_data=callback)
+
+def btn_success(text, callback):
+    return InlineKeyboardButton(f"🟢 {text}", callback_data=callback)
 
 def build_rq_buttons(total_acc):
     keyboard = []
     row = []
     for i in range(1, total_acc + 1):
-        row.append(InlineKeyboardButton(f"⚔️ {i} Rq", callback_data=f"selrq_{i}"))
+        row.append(btn_primary(f"{i} Rq", f"selrq_{i}"))
         if len(row) == 4:
             keyboard.append(row)
             row = []
     if row:
         keyboard.append(row)
     
-    keyboard.append([InlineKeyboardButton("🔙 Back to Main Menu", callback_data="back_to_main")])
+    keyboard.append([btn_danger("🔙 Back to Main Menu", "back_to_main")])
     return InlineKeyboardMarkup(keyboard)
 
 def build_delay_buttons(rq_count):
     delays = [
-        ("⚡ 2 Sec", 2), ("⚡ 5 Sec", 5), ("⚡ 10 Sec", 10), ("⚡ 15 Sec", 15),
-        ("⚡ 30 Sec", 30), ("⚡ 45 Sec", 45), ("⏱ 1 Min", 60), ("⏱ 2 Min", 120),
-        ("⏱ 5 Min", 300), ("⏱ 10 Min", 600), ("⏱ 15 Min", 900), ("⏱ 30 Min", 1800),
-        ("⏱ 45 Min", 2700), ("⏱ 1 Hour", 3600),
+        ("2 Sec", 2), ("5 Sec", 5), ("10 Sec", 10), ("15 Sec", 15),
+        ("30 Sec", 30), ("45 Sec", 45), ("1 Min", 60), ("2 Min", 120),
+        ("5 Min", 300), ("10 Min", 600), ("15 Min", 900), ("30 Min", 1800),
+        ("45 Min", 2700), ("1 Hour", 3600),
     ]
     keyboard = []
     row = []
     for label, sec in delays:
-        row.append(InlineKeyboardButton(label, callback_data=f"delsel_{rq_count}_{sec}"))
+        # Alternating colors: Green, Blue, Pink, Red
+        if sec <= 10:
+            row.append(btn_success(f"⚡ {label}", f"delsel_{rq_count}_{sec}"))
+        elif sec <= 60:
+            row.append(btn_primary(f"⏱ {label}", f"delsel_{rq_count}_{sec}"))
+        elif sec <= 600:
+            row.append(btn_pink(f"⏰ {label}", f"delsel_{rq_count}_{sec}"))
+        else:
+            row.append(btn_danger(f"🐢 {label}", f"delsel_{rq_count}_{sec}"))
         if len(row) == 3:
             keyboard.append(row)
             row = []
     if row:
         keyboard.append(row)
         
-    keyboard.append([InlineKeyboardButton("🔙 Back to Request Selection", callback_data="menu_join")])
+    keyboard.append([btn_danger("🔙 Back to Request Selection", "menu_join")])
     return InlineKeyboardMarkup(keyboard)
 
 # -------------------- DASHBOARD & TEXT FORMATTERS --------------------
@@ -341,20 +373,20 @@ def get_main_keyboard(user_id=None):
     enabled = BUTTON_COLOUR
     keyboard = [
         [
-            create_safe_button("📁 Account Hub", "menu_accounts", enabled),
-            create_safe_button("⚡ Join & Requests", "menu_join", enabled),
+            btn_primary("📁 Account Hub", "menu_accounts"),
+            btn_success("⚡ Join & Requests", "menu_join"),
         ],
         [
-            create_safe_button("🎙 Voice Chat Hub", "menu_vc", enabled),
-            create_safe_button("❤️ React & Views", "menu_engagement", enabled),
+            btn_pink("🎙 Voice Chat Hub", "menu_vc"),
+            btn_primary("❤️ React & Views", "menu_engagement"),
         ],
         [
-            create_safe_button("🤖 Profile Auto", "menu_automation", enabled),
-            create_safe_button("🧹 Mass Cleaning", "menu_mass", enabled),
+            btn_green("🤖 Profile Auto", "menu_automation"),
+            btn_danger("🧹 Mass Cleaning", "menu_mass"),
         ],
         [
-            create_safe_button("🔐 Admin Security", "menu_admin", enabled),
-            create_safe_button("🔄 Refresh Panel", "action_refresh", enabled),
+            btn_primary("🔐 Admin Security", "menu_admin"),
+            btn_success("🔄 Refresh Panel", "action_refresh"),
         ],
         [
             InlineKeyboardButton("👑 Owner Contact", url="https://t.me/Simple_Boy_1k")
@@ -365,7 +397,7 @@ def get_main_keyboard(user_id=None):
 def get_back_button(target_menu="main"):
     cb_data = "back_to_main" if target_menu == "main" else f"menu_{target_menu}"
     return InlineKeyboardMarkup([[
-        InlineKeyboardButton("🔙 Back to Menu", callback_data=cb_data)
+        btn_danger("🔙 Back to Menu", cb_data)
     ]])
 
 # -------------------- COMMAND HANDLERS --------------------
@@ -423,9 +455,9 @@ async def start_handler(client, message):
         user_accounts_count = await sessions_col.count_documents({"added_by": user_id})
         
         req_kb = InlineKeyboardMarkup([
-            [InlineKeyboardButton("➕ Add Account", callback_data="user_add_acc")],
-            [InlineKeyboardButton("🎥 Account Kaise Add Kare?", callback_data="user_tutorial")],
-            [InlineKeyboardButton("📤 Send Request to Owner", callback_data="user_send_req")],
+            [btn_success("➕ Add Account", "user_add_acc")],
+            [btn_primary("🎥 Account Kaise Add Kare?", "user_tutorial")],
+            [btn_pink("📤 Send Request to Owner", "user_send_req")],
             [InlineKeyboardButton("👑 Owner Contact", url="https://t.me/contect1234")]
         ])
         
@@ -473,9 +505,9 @@ async def callback_handler(client, callback_query: CallbackQuery):
             await callback_query.answer("⚠️ Admin Access Revoked! Accounts 3 se kam hain.", show_alert=True)
 
             req_kb = InlineKeyboardMarkup([
-                [InlineKeyboardButton("➕ Add Account", callback_data="user_add_acc")],
-                [InlineKeyboardButton("🎥 Account Kaise Add Kare?", callback_data="user_tutorial")],
-                [InlineKeyboardButton("📤 Send Request to Owner", callback_data="user_send_req")],
+                [btn_success("➕ Add Account", "user_add_acc")],
+                [btn_primary("🎥 Account Kaise Add Kare?", "user_tutorial")],
+                [btn_pink("📤 Send Request to Owner", "user_send_req")],
                 [InlineKeyboardButton("👑 Owner Contact", url="https://t.me/contect1234")]
             ])
 
@@ -497,8 +529,8 @@ async def callback_handler(client, callback_query: CallbackQuery):
             video_val = doc.get("value") if doc else None
 
             tut_kb = InlineKeyboardMarkup([
-                [InlineKeyboardButton("➕ Add Account Now", callback_data="user_add_acc")],
-                [InlineKeyboardButton("🔙 Back", callback_data="user_back_start")]
+                [btn_success("➕ Add Account Now", "user_add_acc")],
+                [btn_danger("🔙 Back", "user_back_start")]
             ])
 
             if video_val:
@@ -528,8 +560,8 @@ async def callback_handler(client, callback_query: CallbackQuery):
             await callback_query.answer()
             add_kb = InlineKeyboardMarkup([
                 [InlineKeyboardButton("⚡ String Generator Bot", url="https://t.me/String_Seasone_robot?start=promoted")],
-                [InlineKeyboardButton("🎥 Watch Tutorial", callback_data="user_tutorial")],
-                [InlineKeyboardButton("🔙 Back", callback_data="user_back_start")]
+                [btn_primary("🎥 Watch Tutorial", "user_tutorial")],
+                [btn_danger("🔙 Back", "user_back_start")]
             ])
             await callback_query.edit_message_text(
                 text=(
@@ -547,9 +579,9 @@ async def callback_handler(client, callback_query: CallbackQuery):
             await callback_query.answer()
             user_accounts_count = await sessions_col.count_documents({"added_by": user_id})
             req_kb = InlineKeyboardMarkup([
-                [InlineKeyboardButton("➕ Add Account", callback_data="user_add_acc")],
-                [InlineKeyboardButton("🎥 Account Kaise Add Kare?", callback_data="user_tutorial")],
-                [InlineKeyboardButton("📤 Send Request to Owner", callback_data="user_send_req")],
+                [btn_success("➕ Add Account", "user_add_acc")],
+                [btn_primary("🎥 Account Kaise Add Kare?", "user_tutorial")],
+                [btn_pink("📤 Send Request to Owner", "user_send_req")],
                 [InlineKeyboardButton("👑 Owner Contact", url="https://t.me/contect1234")]
             ])
             await callback_query.edit_message_text(
@@ -580,8 +612,8 @@ async def callback_handler(client, callback_query: CallbackQuery):
             
             owner_kb = InlineKeyboardMarkup([
                 [
-                    InlineKeyboardButton("✅ Accept Admin", callback_data=f"accept_adm_{user_id}"),
-                    InlineKeyboardButton("❌ Reject", callback_data=f"reject_adm_{user_id}")
+                    btn_success("✅ Accept Admin", f"accept_adm_{user_id}"),
+                    btn_danger("❌ Reject", f"reject_adm_{user_id}")
                 ]
             ])
             try:
@@ -655,20 +687,20 @@ async def callback_handler(client, callback_query: CallbackQuery):
     elif data == "menu_accounts":
         await callback_query.answer()
         kb = []
-        add_purge_row = [InlineKeyboardButton("➕ Add Account", callback_data="act_add_acc")]
+        add_purge_row = [btn_success("➕ Add Account", "act_add_acc")]
         if user_id == OWNER_ID:
-            add_purge_row.append(InlineKeyboardButton("🔔 Purge Dead", callback_data="act_purge_dead"))
+            add_purge_row.append(btn_danger("🔔 Purge Dead", "act_purge_dead"))
         kb.append(add_purge_row)
 
         if USERBOT_SESSIONS:
             for s_str, info in list(USERBOT_SESSIONS.items()):
                 phone_lbl = info["phone"]
                 if user_id == OWNER_ID:
-                    kb.append([InlineKeyboardButton(f"❌ Remove {phone_lbl}", callback_data=f"delacc_{hash(s_str)}")])
+                    kb.append([btn_danger(f"❌ Remove {phone_lbl}", f"delacc_{hash(s_str)}")])
                 else:
-                    kb.append([InlineKeyboardButton(f"📱 {phone_lbl} (Active)", callback_data="none_action")])
+                    kb.append([btn_primary(f"📱 {phone_lbl} (Active)", "none_action")])
                 
-        kb.append([InlineKeyboardButton("🔙 Back to Main Menu", callback_data="back_to_main")])
+        kb.append([btn_danger("🔙 Back to Main Menu", "back_to_main")])
 
         panel_title = "📁 <b>ACCOUNT HUB MANAGEMENT (OWNER VIEW)</b>" if user_id == OWNER_ID else "📁 <b>ACCOUNT HUB (ADMIN VIEW)</b>"
         sub_text = "📌 Kisi specific account ko remove karne ke liye ❌ par click karein:" if user_id == OWNER_ID else "📋 Yahan aap connected accounts dekh sakte hain aur naye accounts add kar sakte hain:"
@@ -719,7 +751,7 @@ async def callback_handler(client, callback_query: CallbackQuery):
         await callback_query.answer()
         add_kb = InlineKeyboardMarkup([
             [InlineKeyboardButton("⚡ String Generator Bot", url="https://t.me/String_Seasone_robot?start=promoted")],
-            [InlineKeyboardButton("🔙 Back to Accounts Hub", callback_data="menu_accounts")]
+            [btn_danger("🔙 Back to Accounts Hub", "menu_accounts")]
         ])
         await callback_query.edit_message_text(
             text=(
@@ -822,11 +854,11 @@ async def callback_handler(client, callback_query: CallbackQuery):
         await callback_query.answer()
         vc_kb = InlineKeyboardMarkup([
             [
-                InlineKeyboardButton("🎙 Join VC", callback_data="vchub_join"),
-                InlineKeyboardButton("🔴 Leave VC", callback_data="vchub_leave")
+                btn_success("🎙 Join VC", "vchub_join"),
+                btn_danger("🔴 Leave VC", "vchub_leave")
             ],
-            [InlineKeyboardButton(f"📊 VC Active Status: {ACTIVE_VC_COUNT} IDs", callback_data="action_refresh")],
-            [InlineKeyboardButton("🔙 Back to Main Menu", callback_data="back_to_main")]
+            [btn_primary(f"📊 VC Active Status: {ACTIVE_VC_COUNT} IDs", "action_refresh")],
+            [btn_danger("🔙 Back to Main Menu", "back_to_main")]
         ])
         await callback_query.edit_message_text(
             text="🎙 <b>VOICE CHAT HUB</b>\n\nSelect Voice Chat Action:",
@@ -857,9 +889,9 @@ async def callback_handler(client, callback_query: CallbackQuery):
         await callback_query.answer()
         eng_st = "ENABLED ✅" if AUTO_VIEWS_ENABLED else "DISABLED ❌"
         eng_kb = InlineKeyboardMarkup([
-            [InlineKeyboardButton("❤️ Send Post React + Views", callback_data="eng_send_react")],
-            [InlineKeyboardButton(f"👁 Auto-Views Status: {eng_st}", callback_data="eng_toggle_views")],
-            [InlineKeyboardButton("🔙 Back to Main Menu", callback_data="back_to_main")]
+            [btn_pink("❤️ Send Post React + Views", "eng_send_react")],
+            [btn_primary(f"👁 Auto-Views Status: {eng_st}", "eng_toggle_views")],
+            [btn_danger("🔙 Back to Main Menu", "back_to_main")]
         ])
         await callback_query.edit_message_text(
             text="❤️ <b>ENGAGEMENT & VIEWS HUB</b>\n\nSelect Post Engagement Tool:",
@@ -893,8 +925,8 @@ async def callback_handler(client, callback_query: CallbackQuery):
         p_st = "24/7 ONLINE ✅" if ONLINE_247_ENABLED else "OFF 🔴"
 
         auto_kb = InlineKeyboardMarkup([
-            [InlineKeyboardButton(f"🟢 24/7 Presence: {p_st}", callback_data="auto_toggle_presence")],
-            [InlineKeyboardButton("🔙 Back to Main Menu", callback_data="back_to_main")]
+            [btn_primary(f"🟢 24/7 Presence: {p_st}", "auto_toggle_presence")],
+            [btn_danger("🔙 Back to Main Menu", "back_to_main")]
         ])
         await callback_query.edit_message_text(
             text="🤖 <b>PROFILE AUTOMATION HUB</b>\n\nAutomation Features Toggle Karein:",
@@ -917,9 +949,9 @@ async def callback_handler(client, callback_query: CallbackQuery):
 
         await callback_query.answer()
         mass_kb = InlineKeyboardMarkup([
-            [InlineKeyboardButton("🚪 Leave All Channels / Groups", callback_data="mass_leave_channels")],
-            [InlineKeyboardButton("♻️ Recycle / Restart Sessions", callback_data="mass_recycle_accounts")],
-            [InlineKeyboardButton("🔙 Back to Main Menu", callback_data="back_to_main")]
+            [btn_danger("🚪 Leave All Channels / Groups", "mass_leave_channels")],
+            [btn_primary("♻️ Recycle / Restart Sessions", "mass_recycle_accounts")],
+            [btn_danger("🔙 Back to Main Menu", "back_to_main")]
         ])
         await callback_query.edit_message_text(
             text="🧹 <b>MASS CLEANING & RESTART TOOLS (OWNER ONLY)</b>\n\nMass Action Select Karein:",
@@ -970,14 +1002,14 @@ async def callback_handler(client, callback_query: CallbackQuery):
         await callback_query.answer()
         
         adm_buttons = [
-            [InlineKeyboardButton("➕ Add Admin", callback_data="adm_add_prompt")]
+            [btn_success("➕ Add Admin", "adm_add_prompt")]
         ]
         
         if user_id == OWNER_ID:
-            adm_buttons[0].append(InlineKeyboardButton("➖ Remove Admin", callback_data="adm_rem_prompt"))
+            adm_buttons[0].append(btn_danger("➖ Remove Admin", "adm_rem_prompt"))
 
-        adm_buttons.append([InlineKeyboardButton("📜 Active Admin List", callback_data="adm_list")])
-        adm_buttons.append([InlineKeyboardButton("🔙 Back to Main Menu", callback_data="back_to_main")])
+        adm_buttons.append([btn_primary("📜 Active Admin List", "adm_list")])
+        adm_buttons.append([btn_danger("🔙 Back to Main Menu", "back_to_main")])
 
         await callback_query.edit_message_text(
             text="🔐 <b>ADMIN SECURITY CONTROL</b>\n\nManage Bot Access & System Admins:",
@@ -1003,12 +1035,12 @@ async def callback_handler(client, callback_query: CallbackQuery):
         rem_buttons = []
         for aid in ADMIN_IDS:
             if aid != OWNER_ID:
-                rem_buttons.append([InlineKeyboardButton(f"❌ Remove: {aid}", callback_data=f"removeadm_{aid}")])
+                rem_buttons.append([btn_danger(f"❌ Remove: {aid}", f"removeadm_{aid}")])
 
         if not rem_buttons:
             await callback_query.answer("Koi extra Admin nahi hai!", show_alert=True)
             return
-        rem_buttons.append([InlineKeyboardButton("🔙 Back", callback_data="menu_admin")])
+        rem_buttons.append([btn_danger("🔙 Back", "menu_admin")])
         await callback_query.answer()
         await callback_query.edit_message_text(
             text="<b>➖ Remove Admin Panel</b>\n\nRemove karne ke liye Admin ID click karein:",
@@ -1092,10 +1124,10 @@ async def message_input_handler(client, message):
             user_accounts_count = await sessions_col.count_documents({"added_by": user_id})
 
             req_kb = InlineKeyboardMarkup([
-                [InlineKeyboardButton("➕ Add More Account", callback_data="user_add_acc")],
-                [InlineKeyboardButton("🎥 Account Kaise Add Kare?", callback_data="user_tutorial")],
-                [InlineKeyboardButton("📤 Send Request to Owner", callback_data="user_send_req")],
-                [InlineKeyboardButton("🔙 Back", callback_data="user_back_start")]
+                [btn_success("➕ Add More Account", "user_add_acc")],
+                [btn_primary("🎥 Account Kaise Add Kare?", "user_tutorial")],
+                [btn_pink("📤 Send Request to Owner", "user_send_req")],
+                [btn_danger("🔙 Back", "user_back_start")]
             ])
 
             await message.reply_text(
@@ -1181,7 +1213,7 @@ async def message_input_handler(client, message):
         STOP_FLAGS["join"] = False
 
         stop_kb = InlineKeyboardMarkup([
-            [InlineKeyboardButton("🛑 Stop Task", callback_data="stop_join_task")]
+            [btn_danger("🛑 Stop Task", "stop_join_task")]
         ])
 
         msg = await message.reply_text(
