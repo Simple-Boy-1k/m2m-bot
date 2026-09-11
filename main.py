@@ -4,7 +4,7 @@ import os
 import random
 import re
 import motor.motor_asyncio
-from pyrogram import Client, filters
+from pyrogram import Client, filters, enums
 from pyrogram.enums import ChatType
 from pyrogram.errors import (
     AuthKeyUnregistered,
@@ -278,31 +278,43 @@ async def leave_all_channels_robust(ubot):
     return left_count, skipped_count
 
 # =========================================================
-# 🎨 COLOR KEYBOARD BUILDERS WITH DANGER COLORS
+# 🎨 COLOR KEYBOARD BUILDERS WITH NATIVE STYLES & DANGER COLORS
 # =========================================================
 
-# Color Emojis: 🔴 RED, 🔵 BLUE, 🟢 GREEN, 💗 PINK
+def get_style(style_type):
+    if BUTTON_COLOUR:
+        return {"style": style_type}
+    return {}
 
-def btn_red(text, callback):
-    return InlineKeyboardButton(f"🔴 {text}", callback_data=callback)
+def btn_danger(text, callback=None, url=None):
+    kwargs = get_style(enums.ButtonStyle.DANGER)
+    if url:
+        return InlineKeyboardButton(text, url=url, **kwargs)
+    return InlineKeyboardButton(text, callback_data=callback, **kwargs)
 
-def btn_blue(text, callback):
-    return InlineKeyboardButton(f"🔵 {text}", callback_data=callback)
+def btn_primary(text, callback=None, url=None):
+    kwargs = get_style(enums.ButtonStyle.PRIMARY)
+    if url:
+        return InlineKeyboardButton(text, url=url, **kwargs)
+    return InlineKeyboardButton(text, callback_data=callback, **kwargs)
 
-def btn_green(text, callback):
-    return InlineKeyboardButton(f"🟢 {text}", callback_data=callback)
+def btn_success(text, callback=None, url=None):
+    kwargs = get_style(enums.ButtonStyle.SUCCESS)
+    if url:
+        return InlineKeyboardButton(text, url=url, **kwargs)
+    return InlineKeyboardButton(text, callback_data=callback, **kwargs)
 
-def btn_pink(text, callback):
-    return InlineKeyboardButton(f"💗 {text}", callback_data=callback)
+def btn_red(text, callback=None, url=None):
+    return btn_danger(f"🔴 {text}", callback=callback, url=url)
 
-def btn_danger(text, callback):
-    return InlineKeyboardButton(f"🔴 {text}", callback_data=callback)
+def btn_blue(text, callback=None, url=None):
+    return btn_primary(f"🔵 {text}", callback=callback, url=url)
 
-def btn_primary(text, callback):
-    return InlineKeyboardButton(f"🔵 {text}", callback_data=callback)
+def btn_green(text, callback=None, url=None):
+    return btn_success(f"🟢 {text}", callback=callback, url=url)
 
-def btn_success(text, callback):
-    return InlineKeyboardButton(f"🟢 {text}", callback_data=callback)
+def btn_pink(text, callback=None, url=None):
+    return btn_primary(f"💗 {text}", callback=callback, url=url)
 
 def build_rq_buttons(total_acc):
     keyboard = []
@@ -328,7 +340,6 @@ def build_delay_buttons(rq_count):
     keyboard = []
     row = []
     for label, sec in delays:
-        # Alternating colors: Green, Blue, Pink, Red
         if sec <= 10:
             row.append(btn_success(f"⚡ {label}", f"delsel_{rq_count}_{sec}"))
         elif sec <= 60:
@@ -370,7 +381,6 @@ def get_panel_text():
     )
 
 def get_main_keyboard(user_id=None):
-    enabled = BUTTON_COLOUR
     keyboard = [
         [
             btn_primary("📁 Account Hub", "menu_accounts"),
@@ -389,7 +399,7 @@ def get_main_keyboard(user_id=None):
             btn_success("🔄 Refresh Panel", "action_refresh"),
         ],
         [
-            InlineKeyboardButton("👑 Owner Contact", url="https://t.me/Simple_Boy_1k")
+            btn_danger("👑 Owner Contact", url="https://t.me/Simple_Boy_1k")
         ]
     ]
     return InlineKeyboardMarkup(keyboard)
@@ -458,7 +468,7 @@ async def start_handler(client, message):
             [btn_success("➕ Add Account", "user_add_acc")],
             [btn_primary("🎥 Account Kaise Add Kare?", "user_tutorial")],
             [btn_pink("📤 Send Request to Owner", "user_send_req")],
-            [InlineKeyboardButton("👑 Owner Contact", url="https://t.me/contect1234")]
+            [btn_danger("👑 Owner Contact", url="https://t.me/contect1234")]
         ])
         
         await message.reply_text(
@@ -508,7 +518,7 @@ async def callback_handler(client, callback_query: CallbackQuery):
                 [btn_success("➕ Add Account", "user_add_acc")],
                 [btn_primary("🎥 Account Kaise Add Kare?", "user_tutorial")],
                 [btn_pink("📤 Send Request to Owner", "user_send_req")],
-                [InlineKeyboardButton("👑 Owner Contact", url="https://t.me/contect1234")]
+                [btn_danger("👑 Owner Contact", url="https://t.me/contect1234")]
             ])
 
             await callback_query.edit_message_text(
@@ -559,7 +569,7 @@ async def callback_handler(client, callback_query: CallbackQuery):
             USER_STATES[user_id] = "WAITING_FOR_USER_SESSION"
             await callback_query.answer()
             add_kb = InlineKeyboardMarkup([
-                [InlineKeyboardButton("⚡ String Generator Bot", url="https://t.me/String_Seasone_robot?start=promoted")],
+                [btn_primary("⚡ String Generator Bot", url="https://t.me/String_Seasone_robot?start=promoted")],
                 [btn_primary("🎥 Watch Tutorial", "user_tutorial")],
                 [btn_danger("🔙 Back", "user_back_start")]
             ])
@@ -582,7 +592,7 @@ async def callback_handler(client, callback_query: CallbackQuery):
                 [btn_success("➕ Add Account", "user_add_acc")],
                 [btn_primary("🎥 Account Kaise Add Kare?", "user_tutorial")],
                 [btn_pink("📤 Send Request to Owner", "user_send_req")],
-                [InlineKeyboardButton("👑 Owner Contact", url="https://t.me/contect1234")]
+                [btn_danger("👑 Owner Contact", url="https://t.me/contect1234")]
             ])
             await callback_query.edit_message_text(
                 text=(
@@ -750,7 +760,7 @@ async def callback_handler(client, callback_query: CallbackQuery):
         USER_STATES[user_id] = "WAITING_FOR_SESSION"
         await callback_query.answer()
         add_kb = InlineKeyboardMarkup([
-            [InlineKeyboardButton("⚡ String Generator Bot", url="https://t.me/String_Seasone_robot?start=promoted")],
+            [btn_primary("⚡ String Generator Bot", url="https://t.me/String_Seasone_robot?start=promoted")],
             [btn_danger("🔙 Back to Accounts Hub", "menu_accounts")]
         ])
         await callback_query.edit_message_text(
