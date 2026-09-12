@@ -7,63 +7,56 @@ import motor.motor_asyncio
 from pyrogram import Client, filters
 from pyrogram.enums import ChatType
 from pyrogram.errors import (
-AuthKeyUnregistered,
-ChannelInvalid,
-FloodWait,
-InviteRequestSent,
-PeerIdInvalid,
-SessionRevoked,
-UserAlreadyParticipant,
-UserCreator,
-UserDeactivated,
-UsernameInvalid,
-RPCError
+    AuthKeyUnregistered,
+    ChannelInvalid,
+    FloodWait,
+    InviteRequestSent,
+    PeerIdInvalid,
+    SessionRevoked,
+    UserAlreadyParticipant,
+    UserCreator,
+    UserDeactivated,
+    UsernameInvalid,
+    RPCError
 )
 from pyrogram.raw import functions, types
 from pyrogram.types import (
-CallbackQuery,
-InlineKeyboardButton,
-InlineKeyboardMarkup,
+    CallbackQuery,
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
 )
 
-from config_buttons import create_safe_button
-from keep_alive import keep_alive
+# Optional Imports with Fallback
+try:
+    from config_buttons import create_safe_button
+except ImportError:
+    def create_safe_button(text, callback_data, enabled=True):
+        return InlineKeyboardButton(text, callback_data=callback_data)
 
-# Start Web Server for keeping alive on VPS/Render
-keep_alive()
+try:
+    from keep_alive import keep_alive
+    keep_alive()
+except ImportError:
+    def keep_alive():
+        pass
 
 # Logging Setup
 logging.basicConfig(level=logging.INFO)
 
 # ==================== CONFIGURATION ====================
-API_ID_RAW = os.environ.get("API_ID")
-API_HASH = os.environ.get("API_HASH")
-BOT_TOKEN = os.environ.get("BOT_TOKEN")
-OWNER_ID_RAW = os.environ.get("OWNER_ID")
-MONGO_URL = os.environ.get("MONGO_URL")
+API_ID_RAW = os.environ.get("API_ID", "31551910")
+API_HASH = os.environ.get("API_HASH", "c2e8e7946d5e4ea947d44b674008f33e")
+BOT_TOKEN = os.environ.get("BOT_TOKEN", "8995421201:AAFBlZXFsip1EbrJ6CkEFdQ4BcfPooUuvLw")
+OWNER_ID_RAW = os.environ.get("OWNER_ID", "8633462777")
+MONGO_URL = os.environ.get("MONGO_URL", "mongodb+srv://sksahnawaj89_db_user:4TjZxb4Xfz0O0TNr@cluster0.5raayqr.mongodb.net/?appName=Cluster0")
 
 BUTTON_COLOUR = os.environ.get("BUTTON_COLOUR", "True").lower() in ("true", "1", "t")
 
-missing_vars = []
-if not API_ID_RAW:
-missing_vars.append("31551910")
-if not API_HASH:
-missing_vars.append("c2e8e7946d5e4ea947d44b674008f33e")
-if not BOT_TOKEN:
-missing_vars.append("8995421201:AAFBlZXFsip1EbrJ6CkEFdQ4BcfPooUuvLw")
-if not OWNER_ID_RAW:
-missing_vars.append("8633462777")
-if not MONGO_URL:
-missing_vars.append("mongodb+srv://sksahnawaj89_db_user:4TjZxb4Xfz0O0TNr@cluster0.5raayqr.mongodb.net/?appName=Cluster0")
-
-if missing_vars:
-raise ValueError(f"CRITICAL ERROR: Environment variables missing: {', '.join(missing_vars)}")
-
 try:
-API_ID = int(API_ID_RAW.strip())
-OWNER_ID = int(OWNER_ID_RAW.strip())
+    API_ID = int(str(API_ID_RAW).strip())
+    OWNER_ID = int(str(OWNER_ID_RAW).strip())
 except ValueError:
-raise ValueError("API_ID aur OWNER_ID me sirf integer numbers hone chahiye!")
+    raise ValueError("API_ID aur OWNER_ID me sirf integer numbers hone chahiye!")
 
 # MongoDB Connection
 mongo_client = motor.motor_asyncio.AsyncIOMotorClient(MONGO_URL)
@@ -85,205 +78,200 @@ USER_STATES = {}
 STOP_FLAGS = {"join": False}  # Task control flag
 
 app = Client(
-"account_manager_bot",
-api_id=API_ID,
-api_hash=API_HASH,
-bot_token=BOT_TOKEN,
+    "account_manager_bot",
+    api_id=API_ID,
+    api_hash=API_HASH,
+    bot_token=BOT_TOKEN,
 )
 
 # -------------------- DATABASE LOADER --------------------
 
 async def load_data_from_db():
-global ADMIN_IDS, EXEMPT_ADMINS, USERBOT_SESSIONS
-logging.info("MongoDB se database load ho raha hai...")
+    global ADMIN_IDS, EXEMPT_ADMINS, USERBOT_SESSIONS
+    logging.info("MongoDB se database load ho raha hai...")
 
-ADMIN_IDS = {OWNER_ID}
-EXEMPT_ADMINS = {OWNER_ID}
+    ADMIN_IDS = {OWNER_ID}
+    EXEMPT_ADMINS = {OWNER_ID}
 
-async for admin_doc in admins_col.find():
-aid = int(admin_doc["user_id"])
-ADMIN_IDS.add(aid)
-if admin_doc.get("exempt", False):
-EXEMPT_ADMINS.add(aid)
+    async for admin_doc in admins_col.find():
+        aid = int(admin_doc["user_id"])
+        ADMIN_IDS.add(aid)
+        if admin_doc.get("exempt", False):
+            EXEMPT_ADMINS.add(aid)
 
-loaded_count = 0
-async for session_doc in sessions_col.find():
-session_str = session_doc.get("session")
-if not session_str:
-continue
-try:
-ubot = Client(
-f"ubot_{loaded_count}_{random.randint(1000,9999)}",
-api_id=API_ID,
-api_hash=API_HASH,
-session_string=session_str,
-in_memory=True,
-)
-await ubot.start()
-me = await ubot.get_me()
-phone_num = f"+{me.phone_number}" if me.phone_number else f"ID: {me.id}"
+    loaded_count = 0
+    async for session_doc in sessions_col.find():
+        session_str = session_doc.get("session")
+        if not session_str:
+            continue
+        try:
+            ubot = Client(
+                f"ubot_{loaded_count}_{random.randint(1000,9999)}",
+                api_id=API_ID,
+                api_hash=API_HASH,
+                session_string=session_str,
+                in_memory=True,
+            )
+            await ubot.start()
+            me = await ubot.get_me()
+            phone_num = f"+{me.phone_number}" if me.phone_number else f"ID: {me.id}"
 
-USERBOT_SESSIONS[session_str] = {
-"client": ubot,
-"phone": phone_num,
-"name": me.first_name or "User",
-"user_id": me.id
-}
-loaded_count += 1
-except Exception as e:
-logging.error(f"Saved session error: {e}")
-await sessions_col.delete_one({"session": session_str})
+            USERBOT_SESSIONS[session_str] = {
+                "client": ubot,
+                "phone": phone_num,
+                "name": me.first_name or "User",
+                "user_id": me.id
+            }
+            loaded_count += 1
+        except Exception as e:
+            logging.error(f"Saved session error: {e}")
+            await sessions_col.delete_one({"session": session_str})
 
-logging.info(f"Database Sync Complete! Restored {loaded_count} accounts & {len(ADMIN_IDS)} admins.")
+    logging.info(f"Database Sync Complete! Restored {loaded_count} accounts & {len(ADMIN_IDS)} admins.")
 
 # -------------------- HELPER FUNCTIONS --------------------
 
 async def send_log_to_owner(client, user, action_msg):
-if user.id == OWNER_ID:
-return
-log_text = (
-"⚔️ <b>ADMIN ACTIVITY LOG</b> ⚔️\n"
-"━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-f"👤 <b>Admin:</b> <a href='tg://user?id={user.id}'>{user.first_name}</a> (<code>{user.id}</code>)\n"
-f"🛠 <b>Action:</b> {action_msg}\n"
-"━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-)
-try:
-await client.send_message(OWNER_ID, log_text)
-except Exception as e:
-logging.error(f"Owner Log Error: {e}")
+    if user.id == OWNER_ID:
+        return
+    log_text = (
+        "⚔️ <b>ADMIN ACTIVITY LOG</b> ⚔️\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        f"👤 <b>Admin:</b> <a href='tg://user?id={user.id}'>{user.first_name}</a> (<code>{user.id}</code>)\n"
+        f"🛠 <b>Action:</b> {action_msg}\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    )
+    try:
+        await client.send_message(OWNER_ID, log_text)
+    except Exception as e:
+        logging.error(f"Owner Log Error: {e}")
 
 async def join_target_chat(ubot, chat_link: str):
-chat_link = chat_link.strip()
-try:
-chat = await ubot.join_chat(chat_link)
-return True, chat, "Joined Successfully ✅"
-except UserAlreadyParticipant:
-try:
-chat = await ubot.get_chat(chat_link)
-return True, chat, "Already Participant ✅"
-except Exception:
-return True, None, "Already Participant ✅"
-except InviteRequestSent:
-return True, None, "Request Sent (Admin Approval Pending) ⏳"
-except FloodWait as e:
-return False, None, f"Telegram Wait ({e.value}s Limit)"
-except Exception as e:
-err_msg = str(e)
-if "FLOOD_WAIT" in err_msg:
-match = re.search(r'\d+', err_msg)
-sec = match.group() if match else "120"
-return False, None, f"Telegram Limit ({sec}s Wait)"
-if "USER_ALREADY_PARTICIPANT" in err_msg:
-return True, None, "Already Participant ✅"
-if "INVITE_REQUEST_SENT" in err_msg:
-return True, None, "Request Sent (Approval Pending) ⏳"
-if "INVITE_HASH_EXPIRED" in err_msg:
-return False, None, "Invite Link Expired"
-return False, None, "Network / Invalid Link"
+    chat_link = chat_link.strip()
+    try:
+        chat = await ubot.join_chat(chat_link)
+        return True, chat, "Joined Successfully ✅"
+    except UserAlreadyParticipant:
+        try:
+            chat = await ubot.get_chat(chat_link)
+            return True, chat, "Already Participant ✅"
+        except Exception:
+            return True, None, "Already Participant ✅"
+    except InviteRequestSent:
+        return True, None, "Request Sent (Admin Approval Pending) ⏳"
+    except FloodWait as e:
+        return False, None, f"Telegram Wait ({e.value}s Limit)"
+    except Exception as e:
+        err_msg = str(e)
+        if "FLOOD_WAIT" in err_msg:
+            match = re.search(r'\d+', err_msg)
+            sec = match.group() if match else "120"
+            return False, None, f"Telegram Limit ({sec}s Wait)"
+        if "USER_ALREADY_PARTICIPANT" in err_msg:
+            return True, None, "Already Participant ✅"
+        if "INVITE_REQUEST_SENT" in err_msg:
+            return True, None, "Request Sent (Approval Pending) ⏳"
+        if "INVITE_HASH_EXPIRED" in err_msg:
+            return False, None, "Invite Link Expired"
+        return False, None, "Network / Invalid Link"
 
 async def join_vc_session(ubot, chat_link: str):
-success, chat, msg = await join_target_chat(ubot, chat_link)
-if not success and "Already Participant" not in msg and "Request Sent" not in msg:
-return False, f"Chat Join Fail: {msg}"
+    success, chat, msg = await join_target_chat(ubot, chat_link)
+    if not success and "Already Participant" not in msg and "Request Sent" not in msg:
+        return False, f"Chat Join Fail: {msg}"
 
-try:
-if not chat:
-chat = await ubot.get_chat(chat_link.strip())
+    try:
+        if not chat:
+            chat = await ubot.get_chat(chat_link.strip())
 
-peer = await ubot.resolve_peer(chat.id)
-if chat.type in [ChatType.CHANNEL, ChatType.SUPERGROUP]:
-full_chat = await ubot.invoke(functions.channels.GetFullChannel(channel=peer))
-else:
-full_chat = await ubot.invoke(functions.messages.GetFullChat(chat_id=chat.id))
+        peer = await ubot.resolve_peer(chat.id)
+        if chat.type in [ChatType.CHANNEL, ChatType.SUPERGROUP]:
+            full_chat = await ubot.invoke(functions.channels.GetFullChannel(channel=peer))
+        else:
+            full_chat = await ubot.invoke(functions.messages.GetFullChat(chat_id=chat.id))
 
-call = full_chat.full_chat.call
-if not call:
-return False, "Voice Chat ACTIVE nahi hai!"
+        call = full_chat.full_chat.call
+        if not call:
+            return False, "Voice Chat ACTIVE nahi hai!"
 
-random_ssrc = random.randint(100000, 999999)
-params_data = f'{{"muted": true, "video_stopped": true, "ssrc": {random_ssrc}}}'
+        random_ssrc = random.randint(100000, 999999)
+        params_data = f'{{"muted": true, "video_stopped": true, "ssrc": {random_ssrc}}}'
 
-await ubot.invoke(
-functions.phone.JoinGroupCall(
-call=types.InputGroupCall(id=call.id, access_hash=call.access_hash),
-join_as=await ubot.resolve_peer("me"),
-params=types.DataJSON(data=params_data),
-muted=True,
-)
-)
-return True, "VC Connected ✅"
-except Exception as e:
-err_str = str(e)
-if any(x in err_str for x in ["GROUPCALL_SSRC_DUPLICATE", "GROUPCALL_ALREADY_JOINED", "SSRC_DUPLICATE_MUCH"]):
-return True, "Already In VC ✅"
-return False, f"VC Error: {err_str}"
+        await ubot.invoke(
+            functions.phone.JoinGroupCall(
+                call=types.InputGroupCall(id=call.id, access_hash=call.access_hash),
+                join_as=await ubot.resolve_peer("me"),
+                params=types.DataJSON(data=params_data),
+                muted=True,
+            )
+        )
+        return True, "VC Connected ✅"
+    except Exception as e:
+        err_str = str(e)
+        if any(x in err_str for x in ["GROUPCALL_SSRC_DUPLICATE", "GROUPCALL_ALREADY_JOINED", "SSRC_DUPLICATE_MUCH"]):
+            return True, "Already In VC ✅"
+        return False, f"VC Error: {err_str}"
 
 async def leave_vc_all():
-global ACTIVE_VC_COUNT, CURRENT_VC_CHAT
-if not CURRENT_VC_CHAT:
-return 0
+    global ACTIVE_VC_COUNT, CURRENT_VC_CHAT
+    if not CURRENT_VC_CHAT:
+        return 0
 
-left_count = 0
-target = CURRENT_VC_CHAT
-CURRENT_VC_CHAT = None
+    left_count = 0
+    target = CURRENT_VC_CHAT
+    CURRENT_VC_CHAT = None
 
-for session_str, data in list(USERBOT_SESSIONS.items()):
-ubot = data["client"]
-try:
-chat = await ubot.get_chat(target)
-peer = await ubot.resolve_peer(chat.id)
-if chat.type in [ChatType.CHANNEL, ChatType.SUPERGROUP]:
-full_chat = await ubot.invoke(functions.channels.GetFullChannel(channel=peer))
-else:
-full_chat = await ubot.invoke(functions.messages.GetFullChat(chat_id=chat.id))
+    for session_str, data in list(USERBOT_SESSIONS.items()):
+        ubot = data["client"]
+        try:
+            chat = await ubot.get_chat(target)
+            peer = await ubot.resolve_peer(chat.id)
+            if chat.type in [ChatType.CHANNEL, ChatType.SUPERGROUP]:
+                full_chat = await ubot.invoke(functions.channels.GetFullChannel(channel=peer))
+            else:
+                full_chat = await ubot.invoke(functions.messages.GetFullChat(chat_id=chat.id))
 
-call = full_chat.full_chat.call
-if call:
-await ubot.invoke(
-functions.phone.LeaveGroupCall(
-call=types.InputGroupCall(id=call.id, access_hash=call.access_hash),
-source=0,
-)
-)
-left_count += 1
-except Exception as e:
-logging.error(f"VC Leave Error: {e}")
+            call = full_chat.full_chat.call
+            if call:
+                await ubot.invoke(
+                    functions.phone.LeaveGroupCall(
+                        call=types.InputGroupCall(id=call.id, access_hash=call.access_hash),
+                        source=0,
+                    )
+                )
+                left_count += 1
+        except Exception as e:
+            logging.error(f"VC Leave Error: {e}")
 
-ACTIVE_VC_COUNT = 0
-return left_count
+    ACTIVE_VC_COUNT = 0
+    return left_count
 
 async def leave_all_channels_robust(ubot):
-left_count, skipped_count = 0, 0
-try:
-async for dialog in ubot.get_dialogs():
-if dialog.chat.type in [ChatType.CHANNEL, ChatType.GROUP, ChatType.SUPERGROUP]:
-try:
-await ubot.leave_chat(dialog.chat.id)
-left_count += 1
-await asyncio.sleep(0.3)
-except UserCreator:
-skipped_count += 1
-continue
-except FloodWait as e:
-await asyncio.sleep(e.value + 1)
-try:
-await ubot.leave_chat(dialog.chat.id)
-left_count += 1
-except Exception:
-pass
-except Exception:
-continue
-except Exception as e:
-logging.error(f"Leave Channels Error: {e}")
-return left_count, skipped_count
+    left_count, skipped_count = 0, 0
+    try:
+        async for dialog in ubot.get_dialogs():
+            if dialog.chat.type in [ChatType.CHANNEL, ChatType.GROUP, ChatType.SUPERGROUP]:
+                try:
+                    await ubot.leave_chat(dialog.chat.id)
+                    left_count += 1
+                    await asyncio.sleep(0.3)
+                except UserCreator:
+                    skipped_count += 1
+                    continue
+                except FloodWait as e:
+                    await asyncio.sleep(e.value + 1)
+                    try:
+                        await ubot.leave_chat(dialog.chat.id)
+                        left_count += 1
+                    except Exception:
+                        pass
+                except Exception:
+                    continue
+    except Exception as e:
+        logging.error(f"Leave Channels Error: {e}")
+    return left_count, skipped_count
 
 # -------------------- KEYBOARD GENERATORS --------------------
-# =========================================================
-# 🎨 COLOR KEYBOARD BUILDERS WITH DANGER COLORS
-# =========================================================
-
-# Color Emojis: 🔴 RED, 🔵 BLUE, 🟢 GREEN, 💗 PINK
 
 def btn_red(text, callback):
     return InlineKeyboardButton(f"🔴 {text}", callback_data=callback)
@@ -307,37 +295,29 @@ def btn_success(text, callback):
     return InlineKeyboardButton(f"🟢 {text}", callback_data=callback)
 
 def build_rq_buttons(total_acc):
-keyboard = []
-row = []
-for i in range(1, total_acc + 1):
-        row.append(InlineKeyboardButton(f"⚔️ {i} Rq", callback_data=f"selrq_{i}"))
+    keyboard = []
+    row = []
+    for i in range(1, total_acc + 1):
         row.append(btn_primary(f"{i} Rq", f"selrq_{i}"))
-if len(row) == 4:
-keyboard.append(row)
-row = []
-if row:
-keyboard.append(row)
+        if len(row) == 2:
+            keyboard.append(row)
+            row = []
+    if row:
+        keyboard.append(row)
 
-    keyboard.append([InlineKeyboardButton("🔙 Back to Main Menu", callback_data="back_to_main")])
     keyboard.append([btn_danger("🔙 Back to Main Menu", "back_to_main")])
-return InlineKeyboardMarkup(keyboard)
+    return InlineKeyboardMarkup(keyboard)
 
 def build_delay_buttons(rq_count):
-delays = [
-        ("⚡ 2 Sec", 2), ("⚡ 5 Sec", 5), ("⚡ 10 Sec", 10), ("⚡ 15 Sec", 15),
-        ("⚡ 30 Sec", 30), ("⚡ 45 Sec", 45), ("⏱ 1 Min", 60), ("⏱ 2 Min", 120),
-        ("⏱ 5 Min", 300), ("⏱ 10 Min", 600), ("⏱ 15 Min", 900), ("⏱ 30 Min", 1800),
-        ("⏱ 45 Min", 2700), ("⏱ 1 Hour", 3600),
+    delays = [
         ("2 Sec", 2), ("5 Sec", 5), ("10 Sec", 10), ("15 Sec", 15),
         ("30 Sec", 30), ("45 Sec", 45), ("1 Min", 60), ("2 Min", 120),
         ("5 Min", 300), ("10 Min", 600), ("15 Min", 900), ("30 Min", 1800),
         ("45 Min", 2700), ("1 Hour", 3600),
-]
-keyboard = []
-row = []
-for label, sec in delays:
-        row.append(InlineKeyboardButton(label, callback_data=f"delsel_{rq_count}_{sec}"))
-        # Alternating colors: Green, Blue, Pink, Red
+    ]
+    keyboard = []
+    row = []
+    for label, sec in delays:
         if sec <= 10:
             row.append(btn_success(f"⚡ {label}", f"delsel_{rq_count}_{sec}"))
         elif sec <= 60:
@@ -346,1081 +326,1027 @@ for label, sec in delays:
             row.append(btn_pink(f"⏰ {label}", f"delsel_{rq_count}_{sec}"))
         else:
             row.append(btn_danger(f"🐢 {label}", f"delsel_{rq_count}_{sec}"))
-if len(row) == 3:
-keyboard.append(row)
-row = []
-if row:
-keyboard.append(row)
+        
+        if len(row) == 2:
+            keyboard.append(row)
+            row = []
+    if row:
+        keyboard.append(row)
 
-    keyboard.append([InlineKeyboardButton("🔙 Back to Request Selection", callback_data="menu_join")])
     keyboard.append([btn_danger("🔙 Back to Request Selection", "menu_join")])
-return InlineKeyboardMarkup(keyboard)
+    return InlineKeyboardMarkup(keyboard)
 
 # -------------------- DASHBOARD & TEXT FORMATTERS --------------------
 
 def get_panel_text():
-views_st = "ACTIVE ⚡" if AUTO_VIEWS_ENABLED else "DISABLED ❌"
-presence_st = "ONLINE 24/7 🟢" if ONLINE_247_ENABLED else "OFFLINE 🔴"
+    views_st = "ACTIVE ⚡" if AUTO_VIEWS_ENABLED else "DISABLED ❌"
+    presence_st = "ONLINE 24/7 🟢" if ONLINE_247_ENABLED else "OFFLINE 🔴"
 
-return (
-"███████████████████████████\n"
-"█   ⚡ 𝐏𝟐𝐏 𝐂𝐎𝐍𝐓𝐑𝐎𝐋 ⚡   █\n"
-"███████████████████████████\n\n"
-"▸ ⚙️ <b>System Version</b> ➔ <code>v4.0 ULTRA</code>\n"
-f"▸ 👥 <b>Userbots</b>       ➔ <code>{len(USERBOT_SESSIONS)}</code> Live\n"
-f"▸ 🎙 <b>VC Active</b>      ➔ <code>{ACTIVE_VC_COUNT}</code> IDs\n"
-f"▸ 🛡 <b>Admins</b>         ➔ <code>{len(ADMIN_IDS)}</code> Active\n"
-f"▸ 👁 <b>Auto-Views</b>     ➔ {views_st}\n"
-"▸ ⚡ <b>Response Ping</b>  ➔ <code>18ms [FAST]</code>\n"
-"▸ 💻 <b>RAM Usage</b>      ➔ <code>14%</code>\n"
-"▸ ⏰ <b>System Uptime</b>   ➔ <code>99.9%</code>\n"
-f"▸ 🌐 <b>Server Status</b>  ➔ {presence_st}\n\n"
-"───────────────────────────\n"
-"✨ <b>Neeche menu se category choose karein:</b>"
-)
+    return (
+        "███████████████████████████\n"
+        "█   ⚡ 𝐏𝟐𝐏 𝐂𝐎𝐍𝐓𝐑𝐎𝐋 ⚡   █\n"
+        "███████████████████████████\n\n"
+        "▸ ⚙️ <b>System Version</b> ➔ <code>v4.0 ULTRA</code>\n"
+        f"▸ 👥 <b>Userbots</b>       ➔ <code>{len(USERBOT_SESSIONS)}</code> Live\n"
+        f"▸ 🎙 <b>VC Active</b>      ➔ <code>{ACTIVE_VC_COUNT}</code> IDs\n"
+        f"▸ 🛡 <b>Admins</b>         ➔ <code>{len(ADMIN_IDS)}</code> Active\n"
+        f"▸ 👁 <b>Auto-Views</b>     ➔ {views_st}\n"
+        "▸ ⚡ <b>Response Ping</b>  ➔ <code>18ms [FAST]</code>\n"
+        "▸ 💻 <b>RAM Usage</b>      ➔ <code>14%</code>\n"
+        "▸ ⏰ <b>System Uptime</b>   ➔ <code>99.9%</code>\n"
+        f"▸ 🌐 <b>Server Status</b>  ➔ {presence_st}\n\n"
+        "───────────────────────────\n"
+        "✨ <b>Neeche menu se category choose karein:</b>"
+    )
 
 def get_main_keyboard(user_id=None):
-enabled = BUTTON_COLOUR
-keyboard = [
-[
-            create_safe_button("📁 Account Hub", "menu_accounts", enabled),
-            create_safe_button("⚡ Join & Requests", "menu_join", enabled),
+    keyboard = [
+        [
             btn_primary("📁 Account Hub", "menu_accounts"),
             btn_success("⚡ Join & Requests", "menu_join"),
-],
-[
-            create_safe_button("🎙 Voice Chat Hub", "menu_vc", enabled),
-            create_safe_button("❤️ React & Views", "menu_engagement", enabled),
+        ],
+        [
             btn_pink("🎙 Voice Chat Hub", "menu_vc"),
             btn_primary("❤️ React & Views", "menu_engagement"),
-],
-[
-            create_safe_button("🤖 Profile Auto", "menu_automation", enabled),
-            create_safe_button("🧹 Mass Cleaning", "menu_mass", enabled),
+        ],
+        [
             btn_green("🤖 Profile Auto", "menu_automation"),
             btn_danger("🧹 Mass Cleaning", "menu_mass"),
-],
-[
-            create_safe_button("🔐 Admin Security", "menu_admin", enabled),
-            create_safe_button("🔄 Refresh Panel", "action_refresh", enabled),
+        ],
+        [
             btn_primary("🔐 Admin Security", "menu_admin"),
             btn_success("🔄 Refresh Panel", "action_refresh"),
-],
-[
-InlineKeyboardButton("👑 Owner Contact", url="https://t.me/Simple_Boy_1k")
-]
-]
-return InlineKeyboardMarkup(keyboard)
+        ],
+        [
+            InlineKeyboardButton("👑 Owner Contact", url="https://t.me/Simple_Boy_1k")
+        ]
+    ]
+    return InlineKeyboardMarkup(keyboard)
 
 def get_back_button(target_menu="main"):
-cb_data = "back_to_main" if target_menu == "main" else f"menu_{target_menu}"
-return InlineKeyboardMarkup([[
-        InlineKeyboardButton("🔙 Back to Menu", callback_data=cb_data)
-        btn_danger("🔙 Back to Menu", cb_data)
-]])
+    cb_data = "back_to_main" if target_menu == "main" else f"menu_{target_menu}"
+    return InlineKeyboardMarkup([
+        [btn_danger("🔙 Back to Menu", cb_data)]
+    ])
 
 # -------------------- COMMAND HANDLERS --------------------
 
 @app.on_message(filters.command("setvideo") & filters.private)
 async def set_video_handler(client, message):
-user_id = message.from_user.id
-if user_id != OWNER_ID:
-await message.reply_text("⛔ Sirf Main Owner hi tutorial video set kar sakta hai!")
-return
+    user_id = message.from_user.id
+    if user_id != OWNER_ID:
+        await message.reply_text("⛔ Sirf Main Owner hi tutorial video set kar sakta hai!")
+        return
 
-video_val = None
-if message.video:
-video_val = message.video.file_id
-elif message.reply_to_message and message.reply_to_message.video:
-video_val = message.reply_to_message.video.file_id
-elif len(message.command) > 1:
-video_val = message.command[1].strip()
+    video_val = None
+    if message.video:
+        video_val = message.video.file_id
+    elif message.reply_to_message and message.reply_to_message.video:
+        video_val = message.reply_to_message.video.file_id
+    elif len(message.command) > 1:
+        video_val = message.command[1].strip()
 
-if not video_val:
-await message.reply_text(
-"❌ <b>Kaise Set Karein Video:</b>\n\n"
-"1️⃣ Kisi Video ko caption me `/setvideo` likh kar bhej dein.\n"
-"2️⃣ Pehle se bheji gayi video par Reply karke `/setvideo` likhein.\n"
-"3️⃣ Direct Link link specify karein: `/setvideo https://your-link.com`"
-)
-return
+    if not video_val:
+        await message.reply_text(
+            "❌ <b>Kaise Set Karein Video:</b>\n\n"
+            "1️⃣ Kisi Video ko caption me `/setvideo` likh kar bhej dein.\n"
+            "2️⃣ Pehle se bheji gayi video par Reply karke `/setvideo` likhein.\n"
+            "3️⃣ Direct Link specify karein: `/setvideo https://your-link.com`"
+        )
+        return
 
-await settings_col.update_one(
-{"key": "tutorial_video"},
-{"$set": {"value": video_val}},
-upsert=True
-)
-await message.reply_text("✅ <b>Tutorial Video Successfully Saved/Updated!</b>")
+    await settings_col.update_one(
+        {"key": "tutorial_video"},
+        {"$set": {"value": video_val}},
+        upsert=True
+    )
+    await message.reply_text("✅ <b>Tutorial Video Successfully Saved/Updated!</b>")
 
 @app.on_message(filters.command("start") & filters.private)
 async def start_handler(client, message):
-user_id = message.from_user.id
+    user_id = message.from_user.id
 
-# 🔥 ANTI-CHEAT: Check Sub-Admin Account Count (Excluding Owner-Added Admins)
-if user_id in ADMIN_IDS and user_id not in EXEMPT_ADMINS:
-user_accounts_count = await sessions_col.count_documents({"added_by": user_id})
-if user_accounts_count < 3:
-ADMIN_IDS.remove(user_id)
-await admins_col.delete_one({"user_id": user_id})
-await pending_req_col.delete_one({"user_id": user_id})
-await message.reply_text(
-"⚠️ <b>ADMIN ACCESS REVOKED!</b>\n\n"
-"Tumhare added active accounts 3 se kam ho chuke hain. Admin access wapas paane ke liye 3 accounts poore karein."
-)
-return
+    # ANTI-CHEAT: Check Sub-Admin Account Count
+    if user_id in ADMIN_IDS and user_id not in EXEMPT_ADMINS:
+        user_accounts_count = await sessions_col.count_documents({"added_by": user_id})
+        if user_accounts_count < 3:
+            ADMIN_IDS.remove(user_id)
+            await admins_col.delete_one({"user_id": user_id})
+            await pending_req_col.delete_one({"user_id": user_id})
+            await message.reply_text(
+                "⚠️ <b>ADMIN ACCESS REVOKED!</b>\n\n"
+                "Tumhare added active accounts 3 se kam ho chuke hain. Admin access wapas paane ke liye 3 accounts poore karein."
+            )
+            return
 
-# SYSTEM 1: If User is not Admin (Request System)
-if user_id not in ADMIN_IDS:
-user_accounts_count = await sessions_col.count_documents({"added_by": user_id})
+    # SYSTEM 1: If User is not Admin (Request System)
+    if user_id not in ADMIN_IDS:
+        user_accounts_count = await sessions_col.count_documents({"added_by": user_id})
 
-req_kb = InlineKeyboardMarkup([
-            [InlineKeyboardButton("➕ Add Account", callback_data="user_add_acc")],
-            [InlineKeyboardButton("🎥 Account Kaise Add Kare?", callback_data="user_tutorial")],
-            [InlineKeyboardButton("📤 Send Request to Owner", callback_data="user_send_req")],
+        req_kb = InlineKeyboardMarkup([
             [btn_success("➕ Add Account", "user_add_acc")],
             [btn_primary("🎥 Account Kaise Add Kare?", "user_tutorial")],
             [btn_pink("📤 Send Request to Owner", "user_send_req")],
-[InlineKeyboardButton("👑 Owner Contact", url="https://t.me/contect1234")]
-])
+            [InlineKeyboardButton("👑 Owner Contact", url="https://t.me/contect1234")]
+        ])
 
-await message.reply_text(
-text=(
-"👋 <b>WELCOME TO WINEX BOT!</b>\n\n"
-"🔒 <b>Bot me Admin banne ka tarika:</b>\n"
-"1️⃣ Pehle kam se kam <b>3 accounts</b> add karein.\n"
-"2️⃣ Uske baad <b>'Send Request to Owner'</b> button par click karke request dalein.\n"
-"3️⃣ Owner jab aapki request accept karega, tab aapko bot ka Admin access mil jayega! 🔥\n\n"
-f"📊 Aapke Added Accounts: <b>{user_accounts_count} / 3</b>"
-),
-reply_markup=req_kb
-)
-return
+        await message.reply_text(
+            text=(
+                "👋 <b>WELCOME TO WINEX BOT!</b>\n\n"
+                "🔒 <b>Bot me Admin banne ka tarika:</b>\n"
+                "1️⃣ Pehle kam se kam <b>3 accounts</b> add karein.\n"
+                "2️⃣ Uske baad <b>'Send Request to Owner'</b> button par click karke request dalein.\n"
+                "3️⃣ Owner jab aapki request accept karega, tab aapko bot ka Admin access mil jayega! 🔥\n\n"
+                f"📊 Aapke Added Accounts: <b>{user_accounts_count} / 3</b>"
+            ),
+            reply_markup=req_kb
+        )
+        return
 
-# SYSTEM 2: If User IS Admin (Show Panel)
-await message.reply_text(
-text=get_panel_text(), reply_markup=get_main_keyboard(user_id)
-)
+    # SYSTEM 2: If User IS Admin (Show Panel)
+    await message.reply_text(
+        text=get_panel_text(), reply_markup=get_main_keyboard(user_id)
+    )
 
 # -------------------- CALLBACK QUERY HANDLER --------------------
 
 @app.on_callback_query()
 async def callback_handler(client, callback_query: CallbackQuery):
-global AUTO_VIEWS_ENABLED, ONLINE_247_ENABLED, ACTIVE_VC_COUNT, STOP_FLAGS
-user_id = callback_query.from_user.id
-data = callback_query.data
+    global AUTO_VIEWS_ENABLED, ONLINE_247_ENABLED, ACTIVE_VC_COUNT, STOP_FLAGS
+    user_id = callback_query.from_user.id
+    data = callback_query.data
 
-# 🛑 STOP TASK BUTTON HANDLER
-if data == "stop_join_task":
-STOP_FLAGS["join"] = True
-await callback_query.answer("🛑 Task roka ja raha hai...", show_alert=True)
-return
+    # STOP TASK BUTTON HANDLER
+    if data == "stop_join_task":
+        STOP_FLAGS["join"] = True
+        await callback_query.answer("🛑 Task roka ja raha hai...", show_alert=True)
+        return
 
-# 🔥 ANTI-CHEAT: Button action par sub-admin count check (Excluding Owner-Added Admins)
-if user_id in ADMIN_IDS and user_id not in EXEMPT_ADMINS:
-user_accounts_count = await sessions_col.count_documents({"added_by": user_id})
-if user_accounts_count < 3:
-ADMIN_IDS.remove(user_id)
-await admins_col.delete_one({"user_id": user_id})
-await pending_req_col.delete_one({"user_id": user_id})
-USER_STATES.pop(user_id, None)
+    # ANTI-CHEAT: Sub-admin count check
+    if user_id in ADMIN_IDS and user_id not in EXEMPT_ADMINS:
+        user_accounts_count = await sessions_col.count_documents({"added_by": user_id})
+        if user_accounts_count < 3:
+            ADMIN_IDS.remove(user_id)
+            await admins_col.delete_one({"user_id": user_id})
+            await pending_req_col.delete_one({"user_id": user_id})
+            USER_STATES.pop(user_id, None)
 
-await callback_query.answer("⚠️ Admin Access Revoked! Accounts 3 se kam hain.", show_alert=True)
+            await callback_query.answer("⚠️ Admin Access Revoked! Accounts 3 se kam hain.", show_alert=True)
 
-req_kb = InlineKeyboardMarkup([
-                [InlineKeyboardButton("➕ Add Account", callback_data="user_add_acc")],
-                [InlineKeyboardButton("🎥 Account Kaise Add Kare?", callback_data="user_tutorial")],
-                [InlineKeyboardButton("📤 Send Request to Owner", callback_data="user_send_req")],
+            req_kb = InlineKeyboardMarkup([
                 [btn_success("➕ Add Account", "user_add_acc")],
                 [btn_primary("🎥 Account Kaise Add Kare?", "user_tutorial")],
                 [btn_pink("📤 Send Request to Owner", "user_send_req")],
-[InlineKeyboardButton("👑 Owner Contact", url="https://t.me/contect1234")]
-])
+                [InlineKeyboardButton("👑 Owner Contact", url="https://t.me/contect1234")]
+            ])
 
-await callback_query.edit_message_text(
-text=(
-"⚠️ <b>ADMIN ACCESS REVOKED!</b>\n\n"
-"Tumhare active accounts 3 se kam ho chuke hain. Admin access wapas paane ke liye fir se 3 accounts poore karein.\n\n"
-f"📊 Aapke Active Added Accounts: <b>{user_accounts_count} / 3</b>"
-),
-reply_markup=req_kb
-)
-return
+            await callback_query.edit_message_text(
+                text=(
+                    "⚠️ <b>ADMIN ACCESS REVOKED!</b>\n\n"
+                    "Tumhare active accounts 3 se kam ho chuke hain. Admin access wapas paane ke liye fir se 3 accounts poore karein.\n\n"
+                    f"📊 Aapke Active Added Accounts: <b>{user_accounts_count} / 3</b>"
+                ),
+                reply_markup=req_kb
+            )
+            return
 
-# ---------------- NON-ADMIN & REQUEST HANDLERS ----------------
-if user_id not in ADMIN_IDS:
-if data == "user_tutorial":
-await callback_query.answer()
-doc = await settings_col.find_one({"key": "tutorial_video"})
-video_val = doc.get("value") if doc else None
+    # ---------------- NON-ADMIN & REQUEST HANDLERS ----------------
+    if user_id not in ADMIN_IDS:
+        if data == "user_tutorial":
+            await callback_query.answer()
+            doc = await settings_col.find_one({"key": "tutorial_video"})
+            video_val = doc.get("value") if doc else None
 
-tut_kb = InlineKeyboardMarkup([
-                [InlineKeyboardButton("➕ Add Account Now", callback_data="user_add_acc")],
-                [InlineKeyboardButton("🔙 Back", callback_data="user_back_start")]
+            tut_kb = InlineKeyboardMarkup([
                 [btn_success("➕ Add Account Now", "user_add_acc")],
                 [btn_danger("🔙 Back", "user_back_start")]
-])
+            ])
 
-if video_val:
-try:
-await client.send_video(
-chat_id=user_id,
-video=video_val,
-caption="🎥 <b>ACCOUNT ADD KARNE KA TUTORIAL</b>\n\nIs video ko dekhein aur seekhein ki bot me account kaise add karein!",
-reply_markup=tut_kb
-)
-except Exception:
-await callback_query.message.reply_text(
-f"🎥 <b>ACCOUNT ADD KARNE KA TUTORIAL</b>\n\n"
-f"🔗 Video Link: {video_val}\n\n"
-"Upar diye gaye link se tutorial video dekhein!",
-reply_markup=tut_kb
-)
-else:
-await callback_query.message.reply_text(
-"⚠️ <b>Tutorial Video Abhi Available Nahi Hai!</b>\n\nOwner ne abhi tak video upload nahi ki hai. Kripya Owner Contact par click karke baat karein.",
-reply_markup=tut_kb
-)
-return
+            if video_val:
+                try:
+                    await client.send_video(
+                        chat_id=user_id,
+                        video=video_val,
+                        caption="🎥 <b>ACCOUNT ADD KARNE KA TUTORIAL</b>\n\nIs video ko dekhein aur seekhein ki bot me account kaise add karein!",
+                        reply_markup=tut_kb
+                    )
+                except Exception:
+                    await callback_query.message.reply_text(
+                        f"🎥 <b>ACCOUNT ADD KARNE KA TUTORIAL</b>\n\n"
+                        f"🔗 Video Link: {video_val}\n\n"
+                        "Upar diye gaye link se tutorial video dekhein!",
+                        reply_markup=tut_kb
+                    )
+            else:
+                await callback_query.message.reply_text(
+                    "⚠️ <b>Tutorial Video Abhi Available Nahi Hai!</b>\n\nOwner ne abhi tak video upload nahi ki hai. Kripya Owner Contact par click karke baat karein.",
+                    reply_markup=tut_kb
+                )
+            return
 
-elif data == "user_add_acc":
-USER_STATES[user_id] = "WAITING_FOR_USER_SESSION"
-await callback_query.answer()
-add_kb = InlineKeyboardMarkup([
-[InlineKeyboardButton("⚡ String Generator Bot", url="https://t.me/String_Seasone_robot?start=promoted")],
-                [InlineKeyboardButton("🎥 Watch Tutorial", callback_data="user_tutorial")],
-                [InlineKeyboardButton("🔙 Back", callback_data="user_back_start")]
+        elif data == "user_add_acc":
+            USER_STATES[user_id] = "WAITING_FOR_USER_SESSION"
+            await callback_query.answer()
+            add_kb = InlineKeyboardMarkup([
+                [InlineKeyboardButton("⚡ String Generator Bot", url="https://t.me/String_Seasone_robot?start=promoted")],
                 [btn_primary("🎥 Watch Tutorial", "user_tutorial")],
                 [btn_danger("🔙 Back", "user_back_start")]
-])
-await callback_query.edit_message_text(
-text=(
-"<b>➕ ADD ACCOUNT FOR ADMIN REQUEST</b>\n\n"
-"1️⃣ Pyrogram V2 String Session nikalein.\n"
-"2️⃣ Yahan chat me paste karke bhej dein.\n\n"
-"👉 Direct Text String Bhejein:"
-),
-reply_markup=add_kb
-)
-return
+            ])
+            await callback_query.edit_message_text(
+                text=(
+                    "<b>➕ ADD ACCOUNT FOR ADMIN REQUEST</b>\n\n"
+                    "1️⃣ Pyrogram V2 String Session nikalein.\n"
+                    "2️⃣ Yahan chat me paste karke bhej dein.\n\n"
+                    "👉 Direct Text String Bhejein:"
+                ),
+                reply_markup=add_kb
+            )
+            return
 
-elif data == "user_back_start":
-USER_STATES.pop(user_id, None)
-await callback_query.answer()
-user_accounts_count = await sessions_col.count_documents({"added_by": user_id})
-req_kb = InlineKeyboardMarkup([
-                [InlineKeyboardButton("➕ Add Account", callback_data="user_add_acc")],
-                [InlineKeyboardButton("🎥 Account Kaise Add Kare?", callback_data="user_tutorial")],
-                [InlineKeyboardButton("📤 Send Request to Owner", callback_data="user_send_req")],
+        elif data == "user_back_start":
+            USER_STATES.pop(user_id, None)
+            await callback_query.answer()
+            user_accounts_count = await sessions_col.count_documents({"added_by": user_id})
+            req_kb = InlineKeyboardMarkup([
                 [btn_success("➕ Add Account", "user_add_acc")],
                 [btn_primary("🎥 Account Kaise Add Kare?", "user_tutorial")],
                 [btn_pink("📤 Send Request to Owner", "user_send_req")],
-[InlineKeyboardButton("👑 Owner Contact", url="https://t.me/contect1234")]
-])
-await callback_query.edit_message_text(
-text=(
-"👋 <b>WELCOME TO BOT!</b>\n\n"
-"🔒 <b>Bot me Admin banne ka tarika:</b>\n"
-"1️⃣ Pehle kam se kam <b>3 accounts</b> add karein.\n"
-"2️⃣ Uske baad <b>'Send Request to Owner'</b> button par click karke request dalein.\n"
-"3️⃣ Owner jab aapki request accept karega, tab aapko bot ka Admin access mil jayega! 🔥\n\n"
-f"📊 Aapke Added Accounts: <b>{user_accounts_count} / 3</b>"
-),
-reply_markup=req_kb
-)
-return
+                [InlineKeyboardButton("👑 Owner Contact", url="https://t.me/contect1234")]
+            ])
+            await callback_query.edit_message_text(
+                text=(
+                    "👋 <b>WELCOME TO BOT!</b>\n\n"
+                    "🔒 <b>Bot me Admin banne ka tarika:</b>\n"
+                    "1️⃣ Pehle kam se kam <b>3 accounts</b> add karein.\n"
+                    "2️⃣ Uske baad <b>'Send Request to Owner'</b> button par click karke request dalein.\n"
+                    "3️⃣ Owner jab aapki request accept karega, tab aapko bot ka Admin access mil jayega! 🔥\n\n"
+                    f"📊 Aapke Added Accounts: <b>{user_accounts_count} / 3</b>"
+                ),
+                reply_markup=req_kb
+            )
+            return
 
-elif data == "user_send_req":
-user_accounts_count = await sessions_col.count_documents({"added_by": user_id})
-if user_accounts_count < 3:
-await callback_query.answer(f"❌ Pehle 3 accounts add karein! Aapne abhi {user_accounts_count} add kiye hain.", show_alert=True)
-return
+        elif data == "user_send_req":
+            user_accounts_count = await sessions_col.count_documents({"added_by": user_id})
+            if user_accounts_count < 3:
+                await callback_query.answer(f"❌ Pehle 3 accounts add karein! Aapne abhi {user_accounts_count} add kiye hain.", show_alert=True)
+                return
 
-existing_req = await pending_req_col.find_one({"user_id": user_id, "status": "pending"})
-if existing_req:
-await callback_query.answer("⏳ Aapki request already Owner ke paas pending hai!", show_alert=True)
-return
+            existing_req = await pending_req_col.find_one({"user_id": user_id, "status": "pending"})
+            if existing_req:
+                await callback_query.answer("⏳ Aapki request already Owner ke paas pending hai!", show_alert=True)
+                return
 
-await pending_req_col.insert_one({"user_id": user_id, "status": "pending"})
+            await pending_req_col.insert_one({"user_id": user_id, "status": "pending"})
 
-owner_kb = InlineKeyboardMarkup([
-[
-                    InlineKeyboardButton("✅ Accept Admin", callback_data=f"accept_adm_{user_id}"),
-                    InlineKeyboardButton("❌ Reject", callback_data=f"reject_adm_{user_id}")
+            owner_kb = InlineKeyboardMarkup([
+                [
                     btn_success("✅ Accept Admin", f"accept_adm_{user_id}"),
                     btn_danger("❌ Reject", f"reject_adm_{user_id}")
-]
-])
-try:
-await client.send_message(
-OWNER_ID,
-f"⚔️ <b>NEW ADMIN REQUEST!</b>\n\n"
-f"👤 User: <a href='tg://user?id={user_id}'>{callback_query.from_user.first_name}</a> (<code>{user_id}</code>)\n"
-f"📱 Added Accounts: <b>{user_accounts_count}</b>\n\n"
-"Kya aap ise Admin banana chahte hain?",
-reply_markup=owner_kb
-)
-except Exception as e:
-logging.error(f"Owner notification error: {e}")
+                ]
+            ])
+            try:
+                await client.send_message(
+                    OWNER_ID,
+                    f"⚔️ <b>NEW ADMIN REQUEST!</b>\n\n"
+                    f"👤 User: <a href='tg://user?id={user_id}'>{callback_query.from_user.first_name}</a> (<code>{user_id}</code>)\n"
+                    f"📱 Added Accounts: <b>{user_accounts_count}</b>\n\n"
+                    "Kya aap ise Admin banana chahte hain?",
+                    reply_markup=owner_kb
+                )
+            except Exception as e:
+                logging.error(f"Owner notification error: {e}")
 
-await callback_query.answer("✅ Request Owner ke paas bhej di gayi hai! Thoda intezaar karein.", show_alert=True)
-return
+            await callback_query.answer("✅ Request Owner ke paas bhej di gayi hai! Thoda intezaar karein.", show_alert=True)
+            return
 
-await callback_query.answer("⛔ Access Denied! Ye feature sirf Admins ke liye hai.", show_alert=True)
-return
+        await callback_query.answer("⛔ Access Denied! Ye feature sirf Admins ke liye hai.", show_alert=True)
+        return
 
-# ---------------- OWNER ACCEPT/REJECT REQUESTS ----------------
-if data.startswith("accept_adm_") or data.startswith("reject_adm_"):
-if user_id != OWNER_ID:
-await callback_query.answer("⛔ Sirf Main Owner ye action le sakta hai!", show_alert=True)
-return
+    # ---------------- OWNER ACCEPT/REJECT REQUESTS ----------------
+    if data.startswith("accept_adm_") or data.startswith("reject_adm_"):
+        if user_id != OWNER_ID:
+            await callback_query.answer("⛔ Sirf Main Owner ye action le sakta hai!", show_alert=True)
+            return
 
-parts = data.split("_")
-action = parts[0]
-target_user_id = int(parts[2])
+        parts = data.split("_")
+        action = parts[0]
+        target_user_id = int(parts[2])
 
-if action == "accept":
-ADMIN_IDS.add(target_user_id)
-await admins_col.update_one({"user_id": target_user_id}, {"$set": {"user_id": target_user_id, "exempt": False}}, upsert=True)
-await pending_req_col.update_one({"user_id": target_user_id}, {"$set": {"status": "accepted"}})
+        if action == "accept":
+            ADMIN_IDS.add(target_user_id)
+            await admins_col.update_one({"user_id": target_user_id}, {"$set": {"user_id": target_user_id, "exempt": False}}, upsert=True)
+            await pending_req_col.update_one({"user_id": target_user_id}, {"$set": {"status": "accepted"}})
 
-await callback_query.answer("Admin Accepted Successfully! ✅", show_alert=True)
-await callback_query.edit_message_text(f"✅ User <code>{target_user_id}</code> ko successfully Admin bana diya gaya hai!")
+            await callback_query.answer("Admin Accepted Successfully! ✅", show_alert=True)
+            await callback_query.edit_message_text(f"✅ User <code>{target_user_id}</code> ko successfully Admin bana diya gaya hai!")
 
-try:
-await client.send_message(
-target_user_id,
-"🎉 <b>CONGRATULATIONS!</b>\n\nOwner ne aapki admin request accept kar li hai. Ab aap `/start` karke bot ka control panel use kar sakte hain!"
-)
-except Exception:
-pass
-else:
-await pending_req_col.update_one({"user_id": target_user_id}, {"$set": {"status": "rejected"}})
-await callback_query.answer("Request Rejected ❌", show_alert=True)
-await callback_query.edit_message_text(f"❌ User <code>{target_user_id}</code> ki request reject kar di gayi hai.")
-try:
-await client.send_message(target_user_id, "❌ Aapki Admin request Owner dwara reject kar di gayi hai.")
-except Exception:
-pass
-return
+            try:
+                await client.send_message(
+                    target_user_id,
+                    "🎉 <b>CONGRATULATIONS!</b>\n\nOwner ne aapki admin request accept kar li hai. Ab aap `/start` karke bot ka control panel use kar sakte hain!"
+                )
+            except Exception:
+                pass
+        else:
+            await pending_req_col.update_one({"user_id": target_user_id}, {"$set": {"status": "rejected"}})
+            await callback_query.answer("Request Rejected ❌", show_alert=True)
+            await callback_query.edit_message_text(f"❌ User <code>{target_user_id}</code> ki request reject kar di gayi hai.")
+            try:
+                await client.send_message(target_user_id, "❌ Aapki Admin request Owner dwara reject kar di gayi hai.")
+            except Exception:
+                pass
+        return
 
-# ---------- REGULAR ADMIN ACTIONS BELOW THIS LINE ----------
+    # ---------- REGULAR ADMIN ACTIONS BELOW THIS LINE ----------
 
-if data == "back_to_main":
-USER_STATES.pop(user_id, None)
-await callback_query.answer()
-await callback_query.edit_message_text(
-text=get_panel_text(), reply_markup=get_main_keyboard(user_id)
-)
+    if data == "back_to_main":
+        USER_STATES.pop(user_id, None)
+        await callback_query.answer()
+        await callback_query.edit_message_text(
+            text=get_panel_text(), reply_markup=get_main_keyboard(user_id)
+        )
 
-elif data == "action_refresh":
-await callback_query.answer("Dashboard Refreshed! 🔄")
-await callback_query.edit_message_text(
-text=get_panel_text(), reply_markup=get_main_keyboard(user_id)
-)
+    elif data == "action_refresh":
+        await callback_query.answer("Dashboard Refreshed! 🔄")
+        await callback_query.edit_message_text(
+            text=get_panel_text(), reply_markup=get_main_keyboard(user_id)
+        )
 
-elif data == "menu_accounts":
-await callback_query.answer()
-kb = []
-        add_purge_row = [InlineKeyboardButton("➕ Add Account", callback_data="act_add_acc")]
+    elif data == "menu_accounts":
+        await callback_query.answer()
+        kb = []
         add_purge_row = [btn_success("➕ Add Account", "act_add_acc")]
-if user_id == OWNER_ID:
-            add_purge_row.append(InlineKeyboardButton("🔔 Purge Dead", callback_data="act_purge_dead"))
+        if user_id == OWNER_ID:
             add_purge_row.append(btn_danger("🔔 Purge Dead", "act_purge_dead"))
-kb.append(add_purge_row)
+        kb.append(add_purge_row)
 
-if USERBOT_SESSIONS:
-for s_str, info in list(USERBOT_SESSIONS.items()):
-phone_lbl = info["phone"]
-if user_id == OWNER_ID:
-                    kb.append([InlineKeyboardButton(f"❌ Remove {phone_lbl}", callback_data=f"delacc_{hash(s_str)}")])
+        if USERBOT_SESSIONS:
+            for s_str, info in list(USERBOT_SESSIONS.items()):
+                phone_lbl = info["phone"]
+                if user_id == OWNER_ID:
                     kb.append([btn_danger(f"❌ Remove {phone_lbl}", f"delacc_{hash(s_str)}")])
-else:
-                    kb.append([InlineKeyboardButton(f"📱 {phone_lbl} (Active)", callback_data="none_action")])
+                else:
                     kb.append([btn_primary(f"📱 {phone_lbl} (Active)", "none_action")])
 
-        kb.append([InlineKeyboardButton("🔙 Back to Main Menu", callback_data="back_to_main")])
         kb.append([btn_danger("🔙 Back to Main Menu", "back_to_main")])
 
-panel_title = "📁 <b>ACCOUNT HUB MANAGEMENT (OWNER VIEW)</b>" if user_id == OWNER_ID else "📁 <b>ACCOUNT HUB (ADMIN VIEW)</b>"
-sub_text = "📌 Kisi specific account ko remove karne ke liye ❌ par click karein:" if user_id == OWNER_ID else "📋 Yahan aap connected accounts dekh sakte hain aur naye accounts add kar sakte hain:"
+        panel_title = "📁 <b>ACCOUNT HUB MANAGEMENT (OWNER VIEW)</b>" if user_id == OWNER_ID else "📁 <b>ACCOUNT HUB (ADMIN VIEW)</b>"
+        sub_text = "📌 Kisi specific account ko remove karne ke liye ❌ par click karein:" if user_id == OWNER_ID else "📋 Yahan aap connected accounts dekh sakte hain aur naye accounts add kar sakte hain:"
 
-await callback_query.edit_message_text(
-text=(
-f"{panel_title}\n\n"
-f"📊 Total Active Connected IDs: <code>{len(USERBOT_SESSIONS)}</code>\n\n"
-f"{sub_text}"
-),
-reply_markup=InlineKeyboardMarkup(kb)
-)
+        await callback_query.edit_message_text(
+            text=(
+                f"{panel_title}\n\n"
+                f"📊 Total Active Connected IDs: <code>{len(USERBOT_SESSIONS)}</code>\n\n"
+                f"{sub_text}"
+            ),
+            reply_markup=InlineKeyboardMarkup(kb)
+        )
 
-elif data == "none_action":
-await callback_query.answer("Account remove karne ka access sirf Owner ke pas hai!", show_alert=True)
+    elif data == "none_action":
+        await callback_query.answer("Account remove karne ka access sirf Owner ke pas hai!", show_alert=True)
 
-elif data.startswith("delacc_"):
-if user_id != OWNER_ID:
-await callback_query.answer("⛔ Access Denied!", show_alert=True)
-return
+    elif data.startswith("delacc_"):
+        if user_id != OWNER_ID:
+            await callback_query.answer("⛔ Access Denied!", show_alert=True)
+            return
 
-target_hash = data.split("_")[1]
-removed_phone = None
-for s_str, info in list(USERBOT_SESSIONS.items()):
-if str(hash(s_str)) == target_hash:
-try:
-await info["client"].stop()
-except Exception:
-pass
-removed_phone = info["phone"]
-del USERBOT_SESSIONS[s_str]
-await sessions_col.delete_one({"session": s_str})
-break
+        target_hash = data.split("_")[1]
+        removed_phone = None
+        for s_str, info in list(USERBOT_SESSIONS.items()):
+            if str(hash(s_str)) == target_hash:
+                try:
+                    await info["client"].stop()
+                except Exception:
+                    pass
+                removed_phone = info["phone"]
+                del USERBOT_SESSIONS[s_str]
+                await sessions_col.delete_one({"session": s_str})
+                break
 
-if removed_phone:
-await callback_query.answer(f"Account {removed_phone} Removed!", show_alert=True)
-else:
-await callback_query.answer("Account Nahi Mila!", show_alert=True)
+        if removed_phone:
+            await callback_query.answer(f"Account {removed_phone} Removed!", show_alert=True)
+        else:
+            await callback_query.answer("Account Nahi Mila!", show_alert=True)
 
-await callback_handler(client, CallbackQuery(
-id=callback_query.id, from_user=callback_query.from_user,
-chat_instance=callback_query.chat_instance, message=callback_query.message,
-data="menu_accounts"
-))
+        await callback_handler(client, CallbackQuery(
+            id=callback_query.id, from_user=callback_query.from_user,
+            chat_instance=callback_query.chat_instance, message=callback_query.message,
+            data="menu_accounts"
+        ))
 
-elif data == "act_add_acc":
-USER_STATES[user_id] = "WAITING_FOR_SESSION"
-await callback_query.answer()
-add_kb = InlineKeyboardMarkup([
-[InlineKeyboardButton("⚡ String Generator Bot", url="https://t.me/String_Seasone_robot?start=promoted")],
-            [InlineKeyboardButton("🔙 Back to Accounts Hub", callback_data="menu_accounts")]
+    elif data == "act_add_acc":
+        USER_STATES[user_id] = "WAITING_FOR_SESSION"
+        await callback_query.answer()
+        add_kb = InlineKeyboardMarkup([
+            [InlineKeyboardButton("⚡ String Generator Bot", url="https://t.me/String_Seasone_robot?start=promoted")],
             [btn_danger("🔙 Back to Accounts Hub", "menu_accounts")]
-])
-await callback_query.edit_message_text(
-text=(
-"<b>➕ ADD NEW ACCOUNT</b>\n\n"
-"1️⃣ Pyrogram V2 String Session nikalein.\n"
-"2️⃣ String Session code ko chat me send karein.\n\n"
-"👉 Direct Text String Bhejein:"
-),
-reply_markup=add_kb
-)
+        ])
+        await callback_query.edit_message_text(
+            text=(
+                "<b>➕ ADD NEW ACCOUNT</b>\n\n"
+                "1️⃣ Pyrogram V2 String Session nikalein.\n"
+                "2️⃣ String Session code ko chat me send karein.\n\n"
+                "👉 Direct Text String Bhejein:"
+            ),
+            reply_markup=add_kb
+        )
 
-elif data == "act_purge_dead":
-if user_id != OWNER_ID:
-await callback_query.answer("⛔ Access Denied!", show_alert=True)
-return
+    elif data == "act_purge_dead":
+        if user_id != OWNER_ID:
+            await callback_query.answer("⛔ Access Denied!", show_alert=True)
+            return
 
-await send_log_to_owner(client, callback_query.from_user, "Dead Accounts Clean Up Kiya")
-await callback_query.answer("Testing all sessions...", show_alert=True)
-dead_count = 0
-for session_str, data_acc in list(USERBOT_SESSIONS.items()):
-ubot = data_acc["client"]
-try:
-await ubot.get_me()
-except Exception:
-try:
-await ubot.stop()
-except Exception:
-pass
-del USERBOT_SESSIONS[session_str]
-await sessions_col.delete_one({"session": session_str})
-dead_count += 1
+        await send_log_to_owner(client, callback_query.from_user, "Dead Accounts Clean Up Kiya")
+        await callback_query.answer("Testing all sessions...", show_alert=True)
+        dead_count = 0
+        for session_str, data_acc in list(USERBOT_SESSIONS.items()):
+            ubot = data_acc["client"]
+            try:
+                await ubot.get_me()
+            except Exception:
+                try:
+                    await ubot.stop()
+                except Exception:
+                    pass
+                del USERBOT_SESSIONS[session_str]
+                await sessions_col.delete_one({"session": session_str})
+                dead_count += 1
 
-await callback_query.edit_message_text(
-text=f"<b>🔔 Purge Complete</b>\n\nTotal <b>{dead_count}</b> dead accounts Database se clean ho gaye.",
-reply_markup=get_back_button("accounts")
-)
+        await callback_query.edit_message_text(
+            text=f"<b>🔔 Purge Complete</b>\n\nTotal <b>{dead_count}</b> dead accounts Database se clean ho gaye.",
+            reply_markup=get_back_button("accounts")
+        )
 
-elif data == "menu_join":
-await callback_query.answer()
-total_acc = len(USERBOT_SESSIONS)
+    elif data == "menu_join":
+        await callback_query.answer()
+        total_acc = len(USERBOT_SESSIONS)
 
-if total_acc == 0:
-await callback_query.edit_message_text(
-text="❌ <b>Koi bhi active account nahi hai!</b> Pehle Account Hub se accounts add karein.",
-reply_markup=get_back_button("main")
-)
-return
+        if total_acc == 0:
+            await callback_query.edit_message_text(
+                text="❌ <b>Koi bhi active account nahi hai!</b> Pehle Account Hub se accounts add karein.",
+                reply_markup=get_back_button("main")
+            )
+            return
 
-await callback_query.edit_message_text(
-text=(
-"⚡ <b>JOIN & REQUESTS HUB</b>\n\n"
-f"👥 Total Available Userbots: <code>{total_acc}</code>\n\n"
-"👉 Kitni Requests (Accounts) join karwani hain select karein:"
-),
-reply_markup=build_rq_buttons(total_acc)
-)
+        await callback_query.edit_message_text(
+            text=(
+                "⚡ <b>JOIN & REQUESTS HUB</b>\n\n"
+                f"👥 Total Available Userbots: <code>{total_acc}</code>\n\n"
+                "👉 Kitni Requests (Accounts) join karwani hain select karein:"
+            ),
+            reply_markup=build_rq_buttons(total_acc)
+        )
 
-elif data.startswith("selrq_"):
-rq_count = int(data.split("_")[1])
-await callback_query.answer()
-await callback_query.edit_message_text(
-text=(
-f"📌 Selected Requests: <code>{rq_count} Rq</code>\n\n"
-"⏱ <b>Per Member Gap/Delay Select Karein:</b>\n"
-"(2 Seconds se lekar 1 Hour tak delay ka option neeche diya gaya hai)"
-),
-reply_markup=build_delay_buttons(rq_count)
-)
+    elif data.startswith("selrq_"):
+        rq_count = int(data.split("_")[1])
+        await callback_query.answer()
+        await callback_query.edit_message_text(
+            text=(
+                f"📌 Selected Requests: <code>{rq_count} Rq</code>\n\n"
+                "⏱ <b>Per Member Gap/Delay Select Karein:</b>\n"
+                "(2 Seconds se lekar 1 Hour tak delay ka option neeche diya gaya hai)"
+            ),
+            reply_markup=build_delay_buttons(rq_count)
+        )
 
-elif data.startswith("delsel_"):
-parts = data.split("_")
-rq_count = int(parts[1])
-delay_sec = float(parts[2])
+    elif data.startswith("delsel_"):
+        parts = data.split("_")
+        rq_count = int(parts[1])
+        delay_sec = float(parts[2])
 
-if delay_sec >= 3600:
-delay_str = f"{int(delay_sec / 3600)} Hour"
-elif delay_sec >= 60:
-delay_str = f"{int(delay_sec / 60)} Min"
-else:
-delay_str = f"{int(delay_sec)} Sec"
+        if delay_sec >= 3600:
+            delay_str = f"{int(delay_sec / 3600)} Hour"
+        elif delay_sec >= 60:
+            delay_str = f"{int(delay_sec / 60)} Min"
+        else:
+            delay_str = f"{int(delay_sec)} Sec"
 
-USER_STATES[user_id] = {
-"type": "WAITING_FOR_JOIN_LINK",
-"rq_count": rq_count,
-"delay_sec": delay_sec,
-"delay_str": delay_str
-}
-await callback_query.answer()
-await callback_query.edit_message_text(
-text=(
-f"✅ <b>Configuration Saved!</b>\n\n"
-f"• Requests Count: <code>{rq_count} Rq</code>\n"
-f"• Delay Gap: <code>{delay_str}</code>\n\n"
-"👉 Target Chat Link (Public / Private Invite) Send Karein:"
-),
-reply_markup=get_back_button("join")
-)
+        USER_STATES[user_id] = {
+            "type": "WAITING_FOR_JOIN_LINK",
+            "rq_count": rq_count,
+            "delay_sec": delay_sec,
+            "delay_str": delay_str
+        }
+        await callback_query.answer()
+        await callback_query.edit_message_text(
+            text=(
+                f"✅ <b>Configuration Saved!</b>\n\n"
+                f"• Requests Count: <code>{rq_count} Rq</code>\n"
+                f"• Delay Gap: <code>{delay_str}</code>\n\n"
+                "👉 Target Chat Link (Public / Private Invite) Send Karein:"
+            ),
+            reply_markup=get_back_button("join")
+        )
 
-elif data == "menu_vc":
-await callback_query.answer()
-vc_kb = InlineKeyboardMarkup([
-[
-                InlineKeyboardButton("🎙 Join VC", callback_data="vchub_join"),
-                InlineKeyboardButton("🔴 Leave VC", callback_data="vchub_leave")
+    elif data == "menu_vc":
+        await callback_query.answer()
+        vc_kb = InlineKeyboardMarkup([
+            [
                 btn_success("🎙 Join VC", "vchub_join"),
                 btn_danger("🔴 Leave VC", "vchub_leave")
-],
-            [InlineKeyboardButton(f"📊 VC Active Status: {ACTIVE_VC_COUNT} IDs", callback_data="action_refresh")],
-            [InlineKeyboardButton("🔙 Back to Main Menu", callback_data="back_to_main")]
+            ],
             [btn_primary(f"📊 VC Active Status: {ACTIVE_VC_COUNT} IDs", "action_refresh")],
             [btn_danger("🔙 Back to Main Menu", "back_to_main")]
-])
-await callback_query.edit_message_text(
-text="🎙 <b>VOICE CHAT HUB</b>\n\nSelect Voice Chat Action:",
-reply_markup=vc_kb
-)
+        ])
+        await callback_query.edit_message_text(
+            text="🎙 <b>VOICE CHAT HUB</b>\n\nSelect Voice Chat Action:",
+            reply_markup=vc_kb
+        )
 
-elif data == "vchub_join":
-if not USERBOT_SESSIONS:
-await callback_query.answer("Koi active account nahi hai!", show_alert=True)
-return
-USER_STATES[user_id] = "WAITING_FOR_VC_LINK"
-await callback_query.answer()
-await callback_query.edit_message_text(
-text="🎙 <b>JOIN VC</b>\n\nGroup Link send karein jahan Voice Chat Active hai:",
-reply_markup=get_back_button("vc")
-)
+    elif data == "vchub_join":
+        if not USERBOT_SESSIONS:
+            await callback_query.answer("Koi active account nahi hai!", show_alert=True)
+            return
+        USER_STATES[user_id] = "WAITING_FOR_VC_LINK"
+        await callback_query.answer()
+        await callback_query.edit_message_text(
+            text="🎙 <b>JOIN VC</b>\n\nGroup Link send karein jahan Voice Chat Active hai:",
+            reply_markup=get_back_button("vc")
+        )
 
-elif data == "vchub_leave":
-await send_log_to_owner(client, callback_query.from_user, "VC Leave Task Activated")
-left_total = await leave_vc_all()
-await callback_query.answer(f"{left_total} IDs Disconnected!", show_alert=True)
-await callback_query.edit_message_text(
-text=f"🔴 <b>VC DISCONNECTED</b>\n\nTotal <b>{left_total}</b> accounts Voice Chat se leave ho chuke hain.",
-reply_markup=get_back_button("vc")
-)
+    elif data == "vchub_leave":
+        await send_log_to_owner(client, callback_query.from_user, "VC Leave Task Activated")
+        left_total = await leave_vc_all()
+        await callback_query.answer(f"{left_total} IDs Disconnected!", show_alert=True)
+        await callback_query.edit_message_text(
+            text=f"🔴 <b>VC DISCONNECTED</b>\n\nTotal <b>{left_total}</b> accounts Voice Chat se leave ho chuke hain.",
+            reply_markup=get_back_button("vc")
+        )
 
-elif data == "menu_engagement":
-await callback_query.answer()
-eng_st = "ENABLED ✅" if AUTO_VIEWS_ENABLED else "DISABLED ❌"
-eng_kb = InlineKeyboardMarkup([
-            [InlineKeyboardButton("❤️ Send Post React + Views", callback_data="eng_send_react")],
-            [InlineKeyboardButton(f"👁 Auto-Views Status: {eng_st}", callback_data="eng_toggle_views")],
-            [InlineKeyboardButton("🔙 Back to Main Menu", callback_data="back_to_main")]
+    elif data == "menu_engagement":
+        await callback_query.answer()
+        eng_st = "ENABLED ✅" if AUTO_VIEWS_ENABLED else "DISABLED ❌"
+        eng_kb = InlineKeyboardMarkup([
             [btn_pink("❤️ Send Post React + Views", "eng_send_react")],
             [btn_primary(f"👁 Auto-Views Status: {eng_st}", "eng_toggle_views")],
             [btn_danger("🔙 Back to Main Menu", "back_to_main")]
-])
-await callback_query.edit_message_text(
-text="❤️ <b>ENGAGEMENT & VIEWS HUB</b>\n\nSelect Post Engagement Tool:",
-reply_markup=eng_kb
-)
+        ])
+        await callback_query.edit_message_text(
+            text="❤️ <b>ENGAGEMENT & VIEWS HUB</b>\n\nSelect Post Engagement Tool:",
+            reply_markup=eng_kb
+        )
 
-elif data == "eng_send_react":
-if not USERBOT_SESSIONS:
-await callback_query.answer("Pehle Accounts Add Karein!", show_alert=True)
-return
-USER_STATES[user_id] = "WAITING_FOR_POST_LINK"
-await callback_query.answer()
-await callback_query.edit_message_text(
-text="❤️ <b>React + Views</b>\n\nTelegram Channel / Group Post Link Send Karein:",
-reply_markup=get_back_button("engagement")
-)
+    elif data == "eng_send_react":
+        if not USERBOT_SESSIONS:
+            await callback_query.answer("Pehle Accounts Add Karein!", show_alert=True)
+            return
+        USER_STATES[user_id] = "WAITING_FOR_POST_LINK"
+        await callback_query.answer()
+        await callback_query.edit_message_text(
+            text="❤️ <b>React + Views</b>\n\nTelegram Channel / Group Post Link Send Karein:",
+            reply_markup=get_back_button("engagement")
+        )
 
-elif data == "eng_toggle_views":
-AUTO_VIEWS_ENABLED = not AUTO_VIEWS_ENABLED
-st = "ENABLED ✅" if AUTO_VIEWS_ENABLED else "DISABLED ❌"
-await send_log_to_owner(client, callback_query.from_user, f"Auto Views Toggle -> {st}")
-await callback_query.answer(f"Auto Views: {st}", show_alert=True)
-await callback_handler(client, CallbackQuery(
-id=callback_query.id, from_user=callback_query.from_user,
-chat_instance=callback_query.chat_instance, message=callback_query.message,
-data="menu_engagement"
-))
+    elif data == "eng_toggle_views":
+        AUTO_VIEWS_ENABLED = not AUTO_VIEWS_ENABLED
+        st = "ENABLED ✅" if AUTO_VIEWS_ENABLED else "DISABLED ❌"
+        await send_log_to_owner(client, callback_query.from_user, f"Auto Views Toggle -> {st}")
+        await callback_query.answer(f"Auto Views: {st}", show_alert=True)
+        await callback_handler(client, CallbackQuery(
+            id=callback_query.id, from_user=callback_query.from_user,
+            chat_instance=callback_query.chat_instance, message=callback_query.message,
+            data="menu_engagement"
+        ))
 
-elif data == "menu_automation":
-await callback_query.answer()
-p_st = "24/7 ONLINE ✅" if ONLINE_247_ENABLED else "OFF 🔴"
+    elif data == "menu_automation":
+        await callback_query.answer()
+        p_st = "24/7 ONLINE ✅" if ONLINE_247_ENABLED else "OFF 🔴"
 
-auto_kb = InlineKeyboardMarkup([
-            [InlineKeyboardButton(f"🟢 24/7 Presence: {p_st}", callback_data="auto_toggle_presence")],
-            [InlineKeyboardButton("🔙 Back to Main Menu", callback_data="back_to_main")]
+        auto_kb = InlineKeyboardMarkup([
             [btn_primary(f"🟢 24/7 Presence: {p_st}", "auto_toggle_presence")],
             [btn_danger("🔙 Back to Main Menu", "back_to_main")]
-])
-await callback_query.edit_message_text(
-text="🤖 <b>PROFILE AUTOMATION HUB</b>\n\nAutomation Features Toggle Karein:",
-reply_markup=auto_kb
-)
+        ])
+        await callback_query.edit_message_text(
+            text="🤖 <b>PROFILE AUTOMATION HUB</b>\n\nAutomation Features Toggle Karein:",
+            reply_markup=auto_kb
+        )
 
-elif data == "auto_toggle_presence":
-ONLINE_247_ENABLED = not ONLINE_247_ENABLED
-await callback_query.answer(f"24/7 Presence: {'ONLINE' if ONLINE_247_ENABLED else 'OFFLINE'}", show_alert=True)
-await callback_handler(client, CallbackQuery(
-id=callback_query.id, from_user=callback_query.from_user,
-chat_instance=callback_query.chat_instance, message=callback_query.message,
-data="menu_automation"
-))
+    elif data == "auto_toggle_presence":
+        ONLINE_247_ENABLED = not ONLINE_247_ENABLED
+        await callback_query.answer(f"24/7 Presence: {'ONLINE' if ONLINE_247_ENABLED else 'OFFLINE'}", show_alert=True)
+        await callback_handler(client, CallbackQuery(
+            id=callback_query.id, from_user=callback_query.from_user,
+            chat_instance=callback_query.chat_instance, message=callback_query.message,
+            data="menu_automation"
+        ))
 
-elif data == "menu_mass":
-if user_id != OWNER_ID:
-await callback_query.answer("⛔ Yeh section sirf Main Owner ke liye hai!", show_alert=True)
-return
+    elif data == "menu_mass":
+        if user_id != OWNER_ID:
+            await callback_query.answer("⛔ Yeh section sirf Main Owner ke liye hai!", show_alert=True)
+            return
 
-await callback_query.answer()
-mass_kb = InlineKeyboardMarkup([
-            [InlineKeyboardButton("🚪 Leave All Channels / Groups", callback_data="mass_leave_channels")],
-            [InlineKeyboardButton("♻️ Recycle / Restart Sessions", callback_data="mass_recycle_accounts")],
-            [InlineKeyboardButton("🔙 Back to Main Menu", callback_data="back_to_main")]
+        await callback_query.answer()
+        mass_kb = InlineKeyboardMarkup([
             [btn_danger("🚪 Leave All Channels / Groups", "mass_leave_channels")],
             [btn_primary("♻️ Recycle / Restart Sessions", "mass_recycle_accounts")],
             [btn_danger("🔙 Back to Main Menu", "back_to_main")]
-])
-await callback_query.edit_message_text(
-text="🧹 <b>MASS CLEANING & RESTART TOOLS (OWNER ONLY)</b>\n\nMass Action Select Karein:",
-reply_markup=mass_kb
-)
+        ])
+        await callback_query.edit_message_text(
+            text="🧹 <b>MASS CLEANING & RESTART TOOLS (OWNER ONLY)</b>\n\nMass Action Select Karein:",
+            reply_markup=mass_kb
+        )
 
-elif data == "mass_leave_channels":
-if user_id != OWNER_ID:
-await callback_query.answer("⛔ Sirf Main Owner leave karwa sakta hai!", show_alert=True)
-return
-if not USERBOT_SESSIONS:
-await callback_query.answer("Koi active account nahi hai!", show_alert=True)
-return
+    elif data == "mass_leave_channels":
+        if user_id != OWNER_ID:
+            await callback_query.answer("⛔ Sirf Main Owner leave karwa sakta hai!", show_alert=True)
+            return
+        if not USERBOT_SESSIONS:
+            await callback_query.answer("Koi active account nahi hai!", show_alert=True)
+            return
 
-await callback_query.answer("Mass Leave Process Active...", show_alert=True)
-await callback_query.edit_message_text("⏳ <b>Mass Leave Active:</b> Channels se accounts silently leave kar rahe hain...")
+        await callback_query.answer("Mass Leave Process Active...", show_alert=True)
+        await callback_query.edit_message_text("⏳ <b>Mass Leave Active:</b> Channels se accounts silently leave kar rahe hain...")
 
-total_l, total_s = 0, 0
-for s_str, data_acc in list(USERBOT_SESSIONS.items()):
-l, s = await leave_all_channels_robust(data_acc["client"])
-total_l += l
-total_s += s
+        total_l, total_s = 0, 0
+        for s_str, data_acc in list(USERBOT_SESSIONS.items()):
+            l, s = await leave_all_channels_robust(data_acc["client"])
+            total_l += l
+            total_s += s
 
-await callback_query.edit_message_text(
-text=f"<b>🚪 MASS LEAVE COMPLETE</b>\n\n✅ Successfully Left: <b>{total_l}</b>\n⚠️ Skipped (Owner): <b>{total_s}</b>",
-reply_markup=get_back_button("mass")
-)
+        await callback_query.edit_message_text(
+            text=f"<b>🚪 MASS LEAVE COMPLETE</b>\n\n✅ Successfully Left: <b>{total_l}</b>\n⚠️ Skipped (Owner): <b>{total_s}</b>",
+            reply_markup=get_back_button("mass")
+        )
 
-elif data == "mass_recycle_accounts":
-if user_id != OWNER_ID:
-await callback_query.answer("⛔ Sirf Main Owner kar sakta hai!", show_alert=True)
-return
-await callback_query.answer("Recycling sessions...", show_alert=True)
-recycled = 0
-for s_str, data_acc in list(USERBOT_SESSIONS.items()):
-try:
-await data_acc["client"].stop()
-await data_acc["client"].start()
-recycled += 1
-except Exception:
-pass
-await callback_query.edit_message_text(
-text=f"✅ Total <b>{recycled}</b> sessions successfully restarted.",
-reply_markup=get_back_button("mass")
-)
+    elif data == "mass_recycle_accounts":
+        if user_id != OWNER_ID:
+            await callback_query.answer("⛔ Sirf Main Owner kar sakta hai!", show_alert=True)
+            return
+        await callback_query.answer("Recycling sessions...", show_alert=True)
+        recycled = 0
+        for s_str, data_acc in list(USERBOT_SESSIONS.items()):
+            try:
+                await data_acc["client"].stop()
+                await data_acc["client"].start()
+                recycled += 1
+            except Exception:
+                pass
+        await callback_query.edit_message_text(
+            text=f"✅ Total <b>{recycled}</b> sessions successfully restarted.",
+            reply_markup=get_back_button("mass")
+        )
 
-elif data == "menu_admin":
-await callback_query.answer()
+    elif data == "menu_admin":
+        await callback_query.answer()
 
-adm_buttons = [
-            [InlineKeyboardButton("➕ Add Admin", callback_data="adm_add_prompt")]
+        adm_buttons = [
             [btn_success("➕ Add Admin", "adm_add_prompt")]
-]
+        ]
 
-if user_id == OWNER_ID:
-            adm_buttons[0].append(InlineKeyboardButton("➖ Remove Admin", callback_data="adm_rem_prompt"))
+        if user_id == OWNER_ID:
             adm_buttons[0].append(btn_danger("➖ Remove Admin", "adm_rem_prompt"))
 
-        adm_buttons.append([InlineKeyboardButton("📜 Active Admin List", callback_data="adm_list")])
-        adm_buttons.append([InlineKeyboardButton("🔙 Back to Main Menu", callback_data="back_to_main")])
         adm_buttons.append([btn_primary("📜 Active Admin List", "adm_list")])
         adm_buttons.append([btn_danger("🔙 Back to Main Menu", "back_to_main")])
 
-await callback_query.edit_message_text(
-text="🔐 <b>ADMIN SECURITY CONTROL</b>\n\nManage Bot Access & System Admins:",
-reply_markup=InlineKeyboardMarkup(adm_buttons)
-)
+        await callback_query.edit_message_text(
+            text="🔐 <b>ADMIN SECURITY CONTROL</b>\n\nManage Bot Access & System Admins:",
+            reply_markup=InlineKeyboardMarkup(adm_buttons)
+        )
 
-elif data == "adm_add_prompt":
-if user_id != OWNER_ID:
-await callback_query.answer("⛔ Sirf Main Owner Add kar sakta hai!", show_alert=True)
-return
-USER_STATES[user_id] = "WAITING_FOR_ADMIN_ID"
-await callback_query.answer()
-await callback_query.edit_message_text(
-text="<b>➕ Add New Admin</b>\n\nTelegram User ID Send Karein:",
-reply_markup=get_back_button("admin")
-)
+    elif data == "adm_add_prompt":
+        if user_id != OWNER_ID:
+            await callback_query.answer("⛔ Sirf Main Owner Add kar sakta hai!", show_alert=True)
+            return
+        USER_STATES[user_id] = "WAITING_FOR_ADMIN_ID"
+        await callback_query.answer()
+        await callback_query.edit_message_text(
+            text="<b>➕ Add New Admin</b>\n\nTelegram User ID Send Karein:",
+            reply_markup=get_back_button("admin")
+        )
 
-elif data == "adm_rem_prompt":
-if user_id != OWNER_ID:
-await callback_query.answer("⛔ Sirf Main Owner Remove kar sakta hai!", show_alert=True)
-return
+    elif data == "adm_rem_prompt":
+        if user_id != OWNER_ID:
+            await callback_query.answer("⛔ Sirf Main Owner Remove kar sakta hai!", show_alert=True)
+            return
 
-rem_buttons = []
-for aid in ADMIN_IDS:
-if aid != OWNER_ID:
-                rem_buttons.append([InlineKeyboardButton(f"❌ Remove: {aid}", callback_data=f"removeadm_{aid}")])
+        rem_buttons = []
+        for aid in ADMIN_IDS:
+            if aid != OWNER_ID:
                 rem_buttons.append([btn_danger(f"❌ Remove: {aid}", f"removeadm_{aid}")])
 
-if not rem_buttons:
-await callback_query.answer("Koi extra Admin nahi hai!", show_alert=True)
-return
-        rem_buttons.append([InlineKeyboardButton("🔙 Back", callback_data="menu_admin")])
+        if not rem_buttons:
+            await callback_query.answer("Koi extra Admin nahi hai!", show_alert=True)
+            return
+
         rem_buttons.append([btn_danger("🔙 Back", "menu_admin")])
-await callback_query.answer()
-await callback_query.edit_message_text(
-text="<b>➖ Remove Admin Panel</b>\n\nRemove karne ke liye Admin ID click karein:",
-reply_markup=InlineKeyboardMarkup(rem_buttons)
-)
+        await callback_query.answer()
+        await callback_query.edit_message_text(
+            text="<b>➖ Remove Admin Panel</b>\n\nRemove karne ke liye Admin ID click karein:",
+            reply_markup=InlineKeyboardMarkup(rem_buttons)
+        )
 
-elif data.startswith("removeadm_"):
-if user_id != OWNER_ID:
-await callback_query.answer("⛔ Sirf Main Owner hi Admin remove kar sakta hai!", show_alert=True)
-return
-target_id = int(data.split("_")[1])
-if target_id in ADMIN_IDS:
-ADMIN_IDS.remove(target_id)
-EXEMPT_ADMINS.discard(target_id)
-await admins_col.delete_one({"user_id": target_id})
-await pending_req_col.delete_one({"user_id": target_id})
-await callback_query.answer("Admin Removed!", show_alert=True)
-await callback_query.edit_message_text(
-text="<b>🔐 ADMIN SECURITY CONTROL</b>\n\nAdmin Access Revoked.",
-reply_markup=get_back_button("admin")
-)
+    elif data.startswith("removeadm_"):
+        if user_id != OWNER_ID:
+            await callback_query.answer("⛔ Sirf Main Owner hi Admin remove kar sakta hai!", show_alert=True)
+            return
+        target_id = int(data.split("_")[1])
+        if target_id in ADMIN_IDS:
+            ADMIN_IDS.remove(target_id)
+            EXEMPT_ADMINS.discard(target_id)
+            await admins_col.delete_one({"user_id": target_id})
+            await pending_req_col.delete_one({"user_id": target_id})
+            await callback_query.answer("Admin Removed!", show_alert=True)
+            await callback_query.edit_message_text(
+                text="<b>🔐 ADMIN SECURITY CONTROL</b>\n\nAdmin Access Revoked.",
+                reply_markup=get_back_button("admin")
+            )
 
-elif data == "adm_list":
-admin_text = "<b>📜 SYSTEM ADMINS LIST:</b>\n\n"
-for aid in ADMIN_IDS:
-role = " (Main Owner)" if aid == OWNER_ID else (" (Owner-Added)" if aid in EXEMPT_ADMINS else " (Sub-Admin)")
-admin_text += f"• <code>{aid}</code>{role}\n"
-await callback_query.answer()
-await callback_query.edit_message_text(
-text=admin_text,
-reply_markup=get_back_button("admin")
-)
+    elif data == "adm_list":
+        admin_text = "<b>📜 SYSTEM ADMINS LIST:</b>\n\n"
+        for aid in ADMIN_IDS:
+            role = " (Main Owner)" if aid == OWNER_ID else (" (Owner-Added)" if aid in EXEMPT_ADMINS else " (Sub-Admin)")
+            admin_text += f"• <code>{aid}</code>{role}\n"
+        await callback_query.answer()
+        await callback_query.edit_message_text(
+            text=admin_text,
+            reply_markup=get_back_button("admin")
+        )
 
 # -------------------- MESSAGE INPUT HANDLER --------------------
 
 @app.on_message(filters.private & ~filters.command(["start", "setvideo"]))
 async def message_input_handler(client, message):
-user_id = message.from_user.id
-text = message.text.strip() if message.text else ""
-state = USER_STATES.get(user_id)
+    user_id = message.from_user.id
+    text = message.text.strip() if message.text else ""
+    state = USER_STATES.get(user_id)
 
-# ---------------- ADD ACCOUNT FOR NON-ADMINS ----------------
-if state == "WAITING_FOR_USER_SESSION":
-if text in USERBOT_SESSIONS or await sessions_col.find_one({"session": text}):
-await message.reply_text("❌ <b>DUPLICATE SESSION!</b>\n\nYe session string pehle se bot me added hai. Kripya koi dusra account try karein.")
-return
+    # ---------------- ADD ACCOUNT FOR NON-ADMINS ----------------
+    if state == "WAITING_FOR_USER_SESSION":
+        if text in USERBOT_SESSIONS or await sessions_col.find_one({"session": text}):
+            await message.reply_text("❌ <b>DUPLICATE SESSION!</b>\n\nYe session string pehle se bot me added hai. Kripya koi dusra account try karein.")
+            return
 
-try:
-temp_client = Client(
-f"ubot_user_{user_id}_{random.randint(1000,9999)}",
-api_id=API_ID,
-api_hash=API_HASH,
-session_string=text,
-in_memory=True,
-)
-await temp_client.start()
-me = await temp_client.get_me()
+        try:
+            temp_client = Client(
+                f"ubot_user_{user_id}_{random.randint(1000,9999)}",
+                api_id=API_ID,
+                api_hash=API_HASH,
+                session_string=text,
+                in_memory=True,
+            )
+            await temp_client.start()
+            me = await temp_client.get_me()
 
-is_already_added = any(info.get("user_id") == me.id for info in USERBOT_SESSIONS.values())
-if is_already_added or await sessions_col.find_one({"user_id": me.id}):
-await temp_client.stop()
-await message.reply_text("❌ <b>ACCOUNT ALREADY EXISTS!</b>\n\nYe Telegram account pehle se bot me logged in hai. Dusra account add karein!")
-return
+            is_already_added = any(info.get("user_id") == me.id for info in USERBOT_SESSIONS.values())
+            if is_already_added or await sessions_col.find_one({"user_id": me.id}):
+                await temp_client.stop()
+                await message.reply_text("❌ <b>ACCOUNT ALREADY EXISTS!</b>\n\nYe Telegram account pehle se bot me logged in hai. Dusra account add karein!")
+                return
 
-phone_num = f"+{me.phone_number}" if me.phone_number else f"ID: {me.id}"
+            phone_num = f"+{me.phone_number}" if me.phone_number else f"ID: {me.id}"
 
-USERBOT_SESSIONS[text] = {
-"client": temp_client,
-"phone": phone_num,
-"name": me.first_name or "User",
-"user_id": me.id
-}
+            USERBOT_SESSIONS[text] = {
+                "client": temp_client,
+                "phone": phone_num,
+                "name": me.first_name or "User",
+                "user_id": me.id
+            }
 
-await sessions_col.update_one(
-{"session": text},
-{"$set": {"session": text, "user_id": me.id, "added_by": user_id}},
-upsert=True,
-)
+            await sessions_col.update_one(
+                {"session": text},
+                {"$set": {"session": text, "user_id": me.id, "added_by": user_id}},
+                upsert=True,
+            )
 
-USER_STATES.pop(user_id, None)
-user_accounts_count = await sessions_col.count_documents({"added_by": user_id})
+            USER_STATES.pop(user_id, None)
+            user_accounts_count = await sessions_col.count_documents({"added_by": user_id})
 
-req_kb = InlineKeyboardMarkup([
-                [InlineKeyboardButton("➕ Add More Account", callback_data="user_add_acc")],
-                [InlineKeyboardButton("🎥 Account Kaise Add Kare?", callback_data="user_tutorial")],
-                [InlineKeyboardButton("📤 Send Request to Owner", callback_data="user_send_req")],
-                [InlineKeyboardButton("🔙 Back", callback_data="user_back_start")]
+            req_kb = InlineKeyboardMarkup([
                 [btn_success("➕ Add More Account", "user_add_acc")],
                 [btn_primary("🎥 Account Kaise Add Kare?", "user_tutorial")],
                 [btn_pink("📤 Send Request to Owner", "user_send_req")],
                 [btn_danger("🔙 Back", "user_back_start")]
-])
+            ])
 
-await message.reply_text(
-f"✅ <b>Account Successfully Added!</b>\n\n"
-f"• Phone/ID: <code>{phone_num}</code>\n"
-f"• Aapke Total Added Accounts: <b>{user_accounts_count} / 3</b>\n\n"
-"Jab 3 accounts ho jayein, tab <b>'Send Request to Owner'</b> par click karein.",
-reply_markup=req_kb,
-)
-except Exception as e:
-await message.reply_text(f"❌ <b>Invalid Session String:</b>\n`{str(e)}`\n\nDobara sahi string session send karein.")
-return
+            await message.reply_text(
+                f"✅ <b>Account Successfully Added!</b>\n\n"
+                f"• Phone/ID: <code>{phone_num}</code>\n"
+                f"• Aapke Total Added Accounts: <b>{user_accounts_count} / 3</b>\n\n"
+                "Jab 3 accounts ho jayein, tab <b>'Send Request to Owner'</b> par click karein.",
+                reply_markup=req_kb,
+            )
+        except Exception as e:
+            await message.reply_text(f"❌ <b>Invalid Session String:</b>\n`{str(e)}`\n\nDobara sahi string session send karein.")
+        return
 
-# Normal check for Admins
-if not state or user_id not in ADMIN_IDS:
-return
+    # Normal check for Admins
+    if not state or user_id not in ADMIN_IDS:
+        return
 
-state_type = state.get("type") if isinstance(state, dict) else state
+    state_type = state.get("type") if isinstance(state, dict) else state
 
-if state_type == "WAITING_FOR_SESSION":
-if text in USERBOT_SESSIONS or await sessions_col.find_one({"session": text}):
-await message.reply_text("❌ <b>DUPLICATE SESSION!</b>\n\nYe string session pehle se active hai.")
-return
+    if state_type == "WAITING_FOR_SESSION":
+        if text in USERBOT_SESSIONS or await sessions_col.find_one({"session": text}):
+            await message.reply_text("❌ <b>DUPLICATE SESSION!</b>\n\nYe string session pehle se active hai.")
+            return
 
-try:
-temp_client = Client(
-f"ubot_{random.randint(1000,9999)}",
-api_id=API_ID,
-api_hash=API_HASH,
-session_string=text,
-in_memory=True,
-)
-await temp_client.start()
-me = await temp_client.get_me()
+        try:
+            temp_client = Client(
+                f"ubot_{random.randint(1000,9999)}",
+                api_id=API_ID,
+                api_hash=API_HASH,
+                session_string=text,
+                in_memory=True,
+            )
+            await temp_client.start()
+            me = await temp_client.get_me()
 
-is_already_added = any(info.get("user_id") == me.id for info in USERBOT_SESSIONS.values())
-if is_already_added or await sessions_col.find_one({"user_id": me.id}):
-await temp_client.stop()
-await message.reply_text("❌ <b>DUPLICATE ACCOUNT!</b>\n\nYe account pehle se system me hai.")
-return
+            is_already_added = any(info.get("user_id") == me.id for info in USERBOT_SESSIONS.values())
+            if is_already_added or await sessions_col.find_one({"user_id": me.id}):
+                await temp_client.stop()
+                await message.reply_text("❌ <b>DUPLICATE ACCOUNT!</b>\n\nYe account pehle se system me hai.")
+                return
 
-phone_num = f"+{me.phone_number}" if me.phone_number else f"ID: {me.id}"
+            phone_num = f"+{me.phone_number}" if me.phone_number else f"ID: {me.id}"
 
-USERBOT_SESSIONS[text] = {
-"client": temp_client,
-"phone": phone_num,
-"name": me.first_name or "User",
-"user_id": me.id
-}
+            USERBOT_SESSIONS[text] = {
+                "client": temp_client,
+                "phone": phone_num,
+                "name": me.first_name or "User",
+                "user_id": me.id
+            }
 
-await sessions_col.update_one(
-{"session": text},
-{"$set": {"session": text, "user_id": me.id, "added_by": user_id}},
-upsert=True,
-)
+            await sessions_col.update_one(
+                {"session": text},
+                {"$set": {"session": text, "user_id": me.id, "added_by": user_id}},
+                upsert=True,
+            )
 
-USER_STATES.pop(user_id, None)
-await send_log_to_owner(client, message.from_user, f"Naya Account Add Kiya:\nName: {me.first_name}\nPhone: {phone_num}")
+            USER_STATES.pop(user_id, None)
+            await send_log_to_owner(client, message.from_user, f"Naya Account Add Kiya:\nName: {me.first_name}\nPhone: {phone_num}")
 
-await message.reply_text(
-f"✅ <b>Account Saved to MongoDB!</b>\n\n• Name: <b>{me.first_name}</b>\n• Phone: <code>{phone_num}</code>",
-reply_markup=get_main_keyboard(user_id),
-)
-except Exception as e:
-await message.reply_text(f"❌ <b>Invalid Session String:</b>\n`{str(e)}`\n\nDobara sahi string session send karein.")
+            await message.reply_text(
+                f"✅ <b>Account Saved to MongoDB!</b>\n\n• Name: <b>{me.first_name}</b>\n• Phone: <code>{phone_num}</code>",
+                reply_markup=get_main_keyboard(user_id),
+            )
+        except Exception as e:
+            await message.reply_text(f"❌ <b>Invalid Session String:</b>\n`{str(e)}`\n\nDobara sahi string session send karein.")
 
-elif state_type == "WAITING_FOR_JOIN_LINK":
-rq_count = int(state.get("rq_count", 1))
-delay_sec = float(state.get("delay_sec", 1.0))
-delay_str = state.get("delay_str", f"{delay_sec} Sec")
+    elif state_type == "WAITING_FOR_JOIN_LINK":
+        rq_count = int(state.get("rq_count", 1))
+        delay_sec = float(state.get("delay_sec", 1.0))
+        delay_str = state.get("delay_str", f"{delay_sec} Sec")
 
-USER_STATES.pop(user_id, None)
-total_available = len(USERBOT_SESSIONS)
+        USER_STATES.pop(user_id, None)
+        total_available = len(USERBOT_SESSIONS)
 
-if rq_count > total_available:
-await message.reply_text(
-f"❌ <b>Order Cancelled:</b>\n\nAvailable Accounts: <b>{total_available}</b>\nSelected Rq: <b>{rq_count}</b>",
-reply_markup=get_main_keyboard(user_id),
-)
-return
+        if rq_count > total_available:
+            await message.reply_text(
+                f"❌ <b>Order Cancelled:</b>\n\nAvailable Accounts: <b>{total_available}</b>\nSelected Rq: <b>{rq_count}</b>",
+                reply_markup=get_main_keyboard(user_id),
+            )
+            return
 
-# Reset Stop Flag for new task
-STOP_FLAGS["join"] = False
+        # Reset Stop Flag for new task
+        STOP_FLAGS["join"] = False
 
-stop_kb = InlineKeyboardMarkup([
-            [InlineKeyboardButton("🛑 Stop Task", callback_data="stop_join_task")]
+        stop_kb = InlineKeyboardMarkup([
             [btn_danger("🛑 Stop Task", "stop_join_task")]
-])
+        ])
 
-msg = await message.reply_text(
-f"⚡ <b>Join Request Active</b>\n\n"
-f"🎯 Target Rq: <code>{rq_count}</code>\n"
-f"⏳ Delay: <code>{delay_str}</code>\n\n"
-f"⚙️ Task Process Shuru Ho Raha Hai...",
-reply_markup=stop_kb
-)
+        msg = await message.reply_text(
+            f"⚡ <b>Join Request Active</b>\n\n"
+            f"🎯 Target Rq: <code>{rq_count}</code>\n"
+            f"⏳ Delay: <code>{delay_str}</code>\n\n"
+            f"⚙️ Task Process Shuru Ho Raha Hai...",
+            reply_markup=stop_kb
+        )
 
-await send_log_to_owner(client, message.from_user, f"🚀 Join Order Lagaya:\n🔗 Link: {text}\n🎯 Total Rq: {rq_count}\n⏳ Delay: {delay_str}")
+        await send_log_to_owner(client, message.from_user, f"🚀 Join Order Lagaya:\n🔗 Link: {text}\n🎯 Total Rq: {rq_count}\n⏳ Delay: {delay_str}")
 
-target_sessions = list(USERBOT_SESSIONS.items())[:rq_count]
-joined, failed, error_logs = 0, 0, []
-was_stopped = False
+        target_sessions = list(USERBOT_SESSIONS.items())[:rq_count]
+        joined, failed, error_logs = 0, 0, []
+        was_stopped = False
 
-for idx, (s_str, data_acc) in enumerate(target_sessions, 1):
-if STOP_FLAGS["join"]:
-was_stopped = True
-break
+        for idx, (s_str, data_acc) in enumerate(target_sessions, 1):
+            if STOP_FLAGS["join"]:
+                was_stopped = True
+                break
 
-ok, _, err_msg = await join_target_chat(data_acc["client"], text)
-if ok:
-joined += 1
-else:
-failed += 1
-if err_msg not in error_logs:
-error_logs.append(err_msg)
+            ok, _, err_msg = await join_target_chat(data_acc["client"], text)
+            if ok:
+                joined += 1
+            else:
+                failed += 1
+                if err_msg not in error_logs:
+                    error_logs.append(err_msg)
 
-# Live Status Update with Stop Button
-try:
-await msg.edit_text(
-f"⚡ <b>Join Request Progress ({idx}/{rq_count})</b>\n\n"
-f"✅ Joined: <b>{joined}</b> | ❌ Failed: <b>{failed}</b>\n"
-f"⏳ Delay: <code>{delay_str}</code>\n\n"
-f"🛑 Bich me rokne ke liye niche button dabayein:",
-reply_markup=stop_kb
-)
-except Exception:
-pass
+            # Live Status Update
+            try:
+                await msg.edit_text(
+                    f"⚡ <b>Join Request Progress ({idx}/{rq_count})</b>\n\n"
+                    f"✅ Joined: <b>{joined}</b> | ❌ Failed: <b>{failed}</b>\n"
+                    f"⏳ Delay: <code>{delay_str}</code>\n\n"
+                    f"🛑 Bich me rokne ke liye niche button dabayein:",
+                    reply_markup=stop_kb
+                )
+            except Exception:
+                pass
 
-# Dynamic delay checking to interrupt sleep immediately if Stop is pressed
-if idx < rq_count:
-slept = 0.0
-while slept < delay_sec:
-if STOP_FLAGS["join"]:
-was_stopped = True
-break
-await asyncio.sleep(0.5)
-slept += 0.5
-if was_stopped:
-break
+            # Dynamic delay checking
+            if idx < rq_count:
+                slept = 0.0
+                while slept < delay_sec:
+                    if STOP_FLAGS["join"]:
+                        was_stopped = True
+                        break
+                    await asyncio.sleep(0.5)
+                    slept += 0.5
+                if was_stopped:
+                    break
 
-# Task Finished or Stopped: Reset Stop Flag for next task
-STOP_FLAGS["join"] = False
+        STOP_FLAGS["join"] = False
 
-status_header = "🛑 <b>Join Operation Stopped by Admin</b>" if was_stopped else "✅ <b>Join Operation Finished</b>"
-res_text = (
-f"{status_header}\n\n"
-f"• Target Rq: <b>{rq_count}</b>\n"
-f"• Processed: <b>{joined + failed}</b> / <b>{rq_count}</b>\n"
-f"• Successful Joins: <b>{joined}</b>\n"
-f"• Failed: <b>{failed}</b>"
-)
-if error_logs:
-res_text += f"\n\n❌ <b>Reason:</b> {error_logs[0]}"
-await msg.edit_text(res_text, reply_markup=get_main_keyboard(user_id))
+        status_header = "🛑 <b>Join Operation Stopped by Admin</b>" if was_stopped else "✅ <b>Join Operation Finished</b>"
+        res_text = (
+            f"{status_header}\n\n"
+            f"• Target Rq: <b>{rq_count}</b>\n"
+            f"• Processed: <b>{joined + failed}</b> / <b>{rq_count}</b>\n"
+            f"• Successful Joins: <b>{joined}</b>\n"
+            f"• Failed: <b>{failed}</b>"
+        )
+        if error_logs:
+            res_text += f"\n\n❌ <b>Reason:</b> {error_logs[0]}"
+        await msg.edit_text(res_text, reply_markup=get_main_keyboard(user_id))
 
-elif state_type == "WAITING_FOR_VC_LINK":
-global ACTIVE_VC_COUNT, CURRENT_VC_CHAT
-USER_STATES.pop(user_id, None)
-CURRENT_VC_CHAT = text
+    elif state_type == "WAITING_FOR_VC_LINK":
+        global ACTIVE_VC_COUNT, CURRENT_VC_CHAT
+        USER_STATES.pop(user_id, None)
+        CURRENT_VC_CHAT = text
 
-await send_log_to_owner(client, message.from_user, f"🎙 VC Join Order: {text}")
+        await send_log_to_owner(client, message.from_user, f"🎙 VC Join Order: {text}")
 
-msg = await message.reply_text("⏳ Connecting Voice Chat across all userbots...")
-connected, failed, vc_errs = 0, 0, []
+        msg = await message.reply_text("⏳ Connecting Voice Chat across all userbots...")
+        connected, failed, vc_errs = 0, 0, []
 
-for s_str, data_acc in USERBOT_SESSIONS.items():
-ok, err_msg = await join_vc_session(data_acc["client"], text)
-if ok:
-connected += 1
-else:
-failed += 1
-vc_errs.append(err_msg)
+        for s_str, data_acc in USERBOT_SESSIONS.items():
+            ok, err_msg = await join_vc_session(data_acc["client"], text)
+            if ok:
+                connected += 1
+            else:
+                failed += 1
+                vc_errs.append(err_msg)
 
-ACTIVE_VC_COUNT = connected
-resp_t = f"🎙 <b>VC Join Complete</b>\n\n• Connected: <b>{connected}</b>\n• Failed: <b>{failed}</b>"
-if vc_errs:
-resp_t += f"\n\n⚠️ <b>Detail:</b> {vc_errs[0]}"
-await msg.edit_text(resp_t, reply_markup=get_main_keyboard(user_id))
+        ACTIVE_VC_COUNT = connected
+        resp_t = f"🎙 <b>VC Join Complete</b>\n\n• Connected: <b>{connected}</b>\n• Failed: <b>{failed}</b>"
+        if vc_errs:
+            resp_t += f"\n\n⚠️ <b>Detail:</b> {vc_errs[0]}"
+        await msg.edit_text(resp_t, reply_markup=get_main_keyboard(user_id))
 
-elif state_type == "WAITING_FOR_POST_LINK":
-USER_STATES.pop(user_id, None)
-await send_log_to_owner(client, message.from_user, f"❤️ React + Views Order: {text}")
+    elif state_type == "WAITING_FOR_POST_LINK":
+        USER_STATES.pop(user_id, None)
+        await send_log_to_owner(client, message.from_user, f"❤️ React + Views Order: {text}")
 
-try:
-parts = [p for p in text.split("/") if p]
-msg_id = int(parts[-1])
-channel = int(f"-100{parts[-2]}") if (len(parts) >= 4 and parts[-3] == "c") else parts[-2]
+        try:
+            parts = [p for p in text.split("/") if p]
+            msg_id = int(parts[-1])
+            channel = int(f"-100{parts[-2]}") if (len(parts) >= 4 and parts[-3] == "c") else parts[-2]
 
-success = 0
-for s_str, data_acc in USERBOT_SESSIONS.items():
-try:
-ubot = data_acc["client"]
-await ubot.get_messages(channel, msg_id)
-await ubot.send_reaction(chat_id=channel, message_id=msg_id, emoji="❤️")
-success += 1
-except Exception:
-continue
+            success = 0
+            for s_str, data_acc in USERBOT_SESSIONS.items():
+                try:
+                    ubot = data_acc["client"]
+                    await ubot.get_messages(channel, msg_id)
+                    await ubot.send_reaction(chat_id=channel, message_id=msg_id, emoji="❤️")
+                    success += 1
+                except Exception:
+                    continue
 
-if success == 0:
-await message.reply_text("⚠️ <b>0 Reactions Delivered!</b>\nPrivate Channel me accounts joined rehne chahiye.", reply_markup=get_main_keyboard(user_id))
-else:
-await message.reply_text(f"✅ Post par <b>{success}</b> Views + Reactions bhej diye gaye!", reply_markup=get_main_keyboard(user_id))
-except Exception as e:
-await message.reply_text(f"❌ <b>Post Link Format Error:</b> `{e}`", reply_markup=get_main_keyboard(user_id))
+            if success == 0:
+                await message.reply_text("⚠️ <b>0 Reactions Delivered!</b>\nPrivate Channel me accounts joined rehne chahiye.", reply_markup=get_main_keyboard(user_id))
+            else:
+                await message.reply_text(f"✅ Post par <b>{success}</b> Views + Reactions bhej diye gaye!", reply_markup=get_main_keyboard(user_id))
+        except Exception as e:
+            await message.reply_text(f"❌ <b>Post Link Format Error:</b> `{e}`", reply_markup=get_main_keyboard(user_id))
 
-elif state_type == "WAITING_FOR_ADMIN_ID":
-if user_id == OWNER_ID and text.isdigit():
-new_id = int(text)
-ADMIN_IDS.add(new_id)
-EXEMPT_ADMINS.add(new_id)
+    elif state_type == "WAITING_FOR_ADMIN_ID":
+        if user_id == OWNER_ID and text.isdigit():
+            new_id = int(text)
+            ADMIN_IDS.add(new_id)
+            EXEMPT_ADMINS.add(new_id)
 
-await admins_col.update_one(
-{"user_id": new_id}, 
-{"$set": {"user_id": new_id, "exempt": True}}, 
-upsert=True
-)
-USER_STATES.pop(user_id, None)
-await message.reply_text(f"✅ User ID <code>{new_id}</code> Saved as Admin (Exempt from Anti-Cheat).", reply_markup=get_main_keyboard(user_id))
-else:
-await message.reply_text("❌ Valid Numeric Telegram User ID Bhejein.")
+            await admins_col.update_one(
+                {"user_id": new_id}, 
+                {"$set": {"user_id": new_id, "exempt": True}}, 
+                upsert=True
+            )
+            USER_STATES.pop(user_id, None)
+            await message.reply_text(f"✅ User ID <code>{new_id}</code> Saved as Admin (Exempt from Anti-Cheat).", reply_markup=get_main_keyboard(user_id))
+        else:
+            await message.reply_text("❌ Valid Numeric Telegram User ID Bhejein.")
 
 # -------------------- BOT RUNNER --------------------
 
 async def main():
-await app.start()
-await load_data_from_db()
+    await app.start()
+    await load_data_from_db()
 
-print("WINEX Control Panel Bot Fully Started ✅")
-await asyncio.Event().wait()
+    print("WINEX Control Panel Bot Fully Started ✅")
+    await asyncio.Event().wait()
 
 
 if __name__ == "__main__":
-loop = asyncio.get_event_loop()
-loop.run_until_complete(main())
+    loop = asyncio.get_event_loop()
+    loop.run_until_complete(main())
