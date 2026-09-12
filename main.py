@@ -343,9 +343,9 @@ def get_panel_text():
     presence_st = "ONLINE 24/7 🟢" if ONLINE_247_ENABLED else "OFFLINE 🔴"
 
     return (
-        "███████████████████████████\n"
-        "█   ⚡ 𝐏𝟐𝐏 𝐂𝐎𝐍𝐓𝐑𝐎𝐋 ⚡   █\n"
-        "███████████████████████████\n\n"
+        "███████████████████\n"
+        "█   ⚡ 𝗣𝟮𝗣 𝗕𝗢𝗧 ⚡   █\n"
+        "███████████████████\n\n"
         "▸ ⚙️ <b>System Version</b> ➔ <code>v4.0 ULTRA</code>\n"
         f"▸ 👥 <b>Userbots</b>       ➔ <code>{len(USERBOT_SESSIONS)}</code> Live\n"
         f"▸ 🎙 <b>VC Active</b>      ➔ <code>{ACTIVE_VC_COUNT}</code> IDs\n"
