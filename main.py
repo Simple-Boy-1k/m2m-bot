@@ -46,15 +46,15 @@ BUTTON_COLOUR = os.environ.get("BUTTON_COLOUR", "True").lower() in ("true", "1",
 
 missing_vars = []
 if not API_ID_RAW:
-missing_vars.append("API_ID")
+missing_vars.append("31551910")
 if not API_HASH:
-missing_vars.append("API_HASH")
+missing_vars.append("c2e8e7946d5e4ea947d44b674008f33e")
 if not BOT_TOKEN:
-missing_vars.append("BOT_TOKEN")
+missing_vars.append("8995421201:AAFBlZXFsip1EbrJ6CkEFdQ4BcfPooUuvLw")
 if not OWNER_ID_RAW:
-missing_vars.append("OWNER_ID")
+missing_vars.append("8633462777")
 if not MONGO_URL:
-missing_vars.append("MONGO_URL")
+missing_vars.append("mongodb+srv://sksahnawaj89_db_user:4TjZxb4Xfz0O0TNr@cluster0.5raayqr.mongodb.net/?appName=Cluster0")
 
 if missing_vars:
 raise ValueError(f"CRITICAL ERROR: Environment variables missing: {', '.join(missing_vars)}")
